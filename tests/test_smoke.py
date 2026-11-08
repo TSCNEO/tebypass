@@ -82,3 +82,17 @@ def test_feed_manager_json_payload() -> None:
     assert "sport-stream.example.org" in values
     assert "198.51.100.25/32" in values
     assert "203.0.113.10/32" in values
+
+
+def test_dynamic_version_info() -> None:
+    """Validate dynamic version info generation."""
+    from app.core.version import get_version_info, get_version_string
+
+    info = get_version_info()
+    assert "base_version" in info
+    assert "commit" in info
+    assert "display_version" in info
+
+    ver_str = get_version_string()
+    assert len(ver_str) > 0
+    assert ver_str.startswith("v")

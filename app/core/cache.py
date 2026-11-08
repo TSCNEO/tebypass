@@ -97,7 +97,9 @@ class SlidingWindowCache:
         async with self._lock:
             norm_fqdn = fqdn.lower().strip()
             now = datetime.now(UTC)
-            return [v for v in self._entries.values() if v.fqdn == norm_fqdn and not v.is_expired(now)]
+            return [
+                v for v in self._entries.values() if v.fqdn == norm_fqdn and not v.is_expired(now)
+            ]
 
     async def size(self) -> int:
         """Return count of cached resolutions."""

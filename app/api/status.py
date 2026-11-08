@@ -7,6 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.version import get_version_info, get_version_string
 from app.db.models import ResolvedIP, Target
 from app.db.session import get_db
 from app.drivers import get_router_driver
@@ -48,10 +49,16 @@ async def get_system_status(db: AsyncSession = Depends(get_db)) -> SystemStatusR
 
     return SystemStatusResponse(
         status="healthy" if driver_status.health.value != "unhealthy" else "degraded",
-        version="0.1.0",
+        version=get_version_string(),
         driver=driver_resp,
         total_targets=total_targets,
         total_resolved_ips=total_resolved,
         active_routes=driver_status.active_routes_count,
         sliding_window_seconds=settings.sliding_window_seconds,
     )
+
+
+@router.get("/api/v1/version")
+async def get_version_endpoint() -> dict[str, str | int]:
+    """Return detailed dynamic version and build metadata."""
+    return get_version_info()

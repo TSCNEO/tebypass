@@ -9,7 +9,9 @@ from pydantic import BaseModel, Field
 class TargetBase(BaseModel):
     """Base schema for target data."""
 
-    value: str = Field(..., description="FQDN (e.g. sport-stream.example.org) or CIDR (e.g. 198.51.100.0/24)")
+    value: str = Field(
+        ..., description="FQDN (e.g. sport-stream.example.org) or CIDR (e.g. 198.51.100.0/24)"
+    )
     destination_type: Literal["fqdn", "cidr"] | None = Field(
         default=None, description="Explicit type or auto-detected if None"
     )

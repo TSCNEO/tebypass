@@ -85,7 +85,12 @@ class FeedManager:
                     if t:
                         targets.append(t)
                 elif isinstance(item, dict):
-                    val = item.get("value") or item.get("target") or item.get("domain") or item.get("ip")
+                    val = (
+                        item.get("value")
+                        or item.get("target")
+                        or item.get("domain")
+                        or item.get("ip")
+                    )
                     desc = item.get("description", "")
                     if val and isinstance(val, str):
                         t = self.parse_entry(val, description=desc)

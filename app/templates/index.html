@@ -35,6 +35,10 @@
     </div>
     <div class="flex items-center space-x-6 mono text-xs">
       <div class="flex items-center space-x-2">
+        <span class="text-slate-500">VER:</span>
+        <span class="text-amber-400 font-semibold" x-text="status.version || '{{ version }}'">{{ version }}</span>
+      </div>
+      <div class="flex items-center space-x-2">
         <span class="text-slate-500">PORT:</span>
         <span class="text-slate-300">9384</span>
       </div>
@@ -118,7 +122,7 @@
 
   <!-- Footer Credits -->
   <footer class="border-t border-[#262b35] bg-[#0d0f12] px-6 py-4 text-center mono text-xs text-slate-500">
-    TeByPass v0.1.0 &bull; Reconocimiento y agradecimiento a <strong class="text-slate-400">jcastro/stopliga</strong> y la comunidad <strong class="text-slate-400">hayahora.futbol</strong>.
+    TeByPass <span class="text-slate-400" x-text="status.version || '{{ version }}'">{{ version }}</span> &bull; Reconocimiento y agradecimiento a <strong class="text-slate-400">jcastro/stopliga</strong> y la comunidad <strong class="text-slate-400">hayahora.futbol</strong>.
   </footer>
 
   <script>

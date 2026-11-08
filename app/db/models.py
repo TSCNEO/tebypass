@@ -32,7 +32,9 @@ class Feed(Base):
     etag: Mapped[str | None] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
-    targets: Mapped[list["Target"]] = relationship("Target", back_populates="feed", cascade="all, delete-orphan")
+    targets: Mapped[list["Target"]] = relationship(
+        "Target", back_populates="feed", cascade="all, delete-orphan"
+    )
 
 
 class Target(Base):
@@ -41,7 +43,9 @@ class Target(Base):
     __tablename__ = "targets"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    feed_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("feeds.id", ondelete="CASCADE"), nullable=True)
+    feed_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("feeds.id", ondelete="CASCADE"), nullable=True
+    )
     destination_type: Mapped[str] = mapped_column(String(16), nullable=False)  # 'fqdn' | 'cidr'
     value: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     description: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -67,7 +71,9 @@ class ResolvedIP(Base):
     cidr: Mapped[str] = mapped_column(String(68), nullable=False, index=True)
     first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
     ttl_seconds: Mapped[int] = mapped_column(Integer, default=3600)
 
     target: Mapped[Target] = relationship("Target", back_populates="resolved_ips")

@@ -15,6 +15,7 @@ from app.core.cache import SlidingWindowCache
 from app.core.config import settings
 from app.core.engine import ReconciliationEngine
 from app.core.resolver import NativeDNSResolver
+from app.core.version import get_version_string
 from app.db.session import init_db
 from app.drivers import get_router_driver
 
@@ -61,7 +62,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 app = FastAPI(
     title="TeByPass",
-    version="0.1.0",
+    version=get_version_string(),
     description="Agnostic, modular L3 split-routing bypass engine for arbitrary network endpoints",
     lifespan=lifespan,
 )
@@ -86,5 +87,8 @@ async def dashboard_view(request: Request) -> Any:
     return templates.TemplateResponse(
         request=request,
         name="index.html",
-        context={"driver_name": settings.router_driver},
+        context={
+            "driver_name": settings.router_driver,
+            "version": get_version_string(),
+        },
     )
