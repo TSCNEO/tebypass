@@ -1,0 +1,36 @@
+services:
+  tebypass:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tebypass
+    restart: unless-stopped
+    ports:
+      - "${TEBYPASS_PORT:-9384}:9384"
+    environment:
+      - TEBYPASS_PORT=9384
+      - TEBYPASS_DATABASE_URL=sqlite+aiosqlite:////data/tebypass.db
+      - TEBYPASS_ROUTER_TYPE=mock
+      - TEBYPASS_SYNC_INTERVAL_SECONDS=300
+      - TEBYPASS_CACHE_TTL_HOURS=6
+    volumes:
+      - tebypass-data:/data
+
+  # Optional Virtual Gateway sidecar for carrier router environments
+  tebypass-gateway:
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile
+    container_name: tebypass-gateway
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.ipv4.ip_forward=1
+    volumes:
+      - ./gateway/wireguard:/etc/wireguard:ro
+    profiles:
+      - gateway
+
+volumes:
+  tebypass-data:

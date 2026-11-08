@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TeByPass // L3 Split-Routing Engine</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.3/dist/cdn.min.js"></script>
+  <style>
+    :root {
+      --bg-charcoal: #0d0f12;
+      --bg-graphite: #16191f;
+      --border-edge: #262b35;
+      --amber-glow: #f59e0b;
+      --telemetry-green: #10b981;
+      --alarm-red: #ef4444;
+    }
+    body {
+      background-color: var(--bg-charcoal);
+      color: #e2e8f0;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+    .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+  <!-- Top Navigation Header -->
+  <header class="border-b border-[#262b35] bg-[#16191f] px-6 py-4 flex items-center justify-between">
+    <div class="flex items-center space-x-3">
+      <div class="w-3 h-3 rounded-full bg-[#f59e0b] shadow-[0_0_8px_#f59e0b]"></div>
+      <h1 class="text-lg font-bold tracking-wider uppercase text-slate-100">TeByPass</h1>
+      <span class="text-xs bg-[#262b35] text-amber-400 px-2 py-0.5 rounded mono">L3 SPLIT ROUTING</span>
+    </div>
+    <div class="flex items-center space-x-6 mono text-xs">
+      <div class="flex items-center space-x-2">
+        <span class="text-slate-500">PORT:</span>
+        <span class="text-slate-300">9384</span>
+      </div>
+      <div class="flex items-center space-x-2">
+        <span class="text-slate-500">ROUTER:</span>
+        <span class="text-[#10b981] font-semibold uppercase">{{ driver_name }}</span>
+      </div>
+      <div class="flex items-center space-x-2">
+        <span class="text-slate-500">STATUS:</span>
+        <span class="text-[#10b981] font-semibold">ONLINE</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Dashboard -->
+  <main class="flex-1 p-6 max-w-7xl w-full mx-auto space-y-6" x-data="dashboard()">
+    <!-- Telemetry Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div class="bg-[#16191f] border border-[#262b35] p-5 rounded-lg">
+        <div class="text-xs text-slate-400 uppercase tracking-wider mb-1">Rutas L3 Inyectadas</div>
+        <div class="text-3xl font-bold mono text-[#10b981]" x-text="status.active_routes || 0">0</div>
+        <div class="text-xs text-slate-500 mt-2 mono">Prefijos CIDR activos</div>
+      </div>
+      <div class="bg-[#16191f] border border-[#262b35] p-5 rounded-lg">
+        <div class="text-xs text-slate-400 uppercase tracking-wider mb-1">Objetivos Configurados</div>
+        <div class="text-3xl font-bold mono text-slate-200" x-text="status.total_targets || 0">0</div>
+        <div class="text-xs text-slate-500 mt-2 mono">FQDNs y CIDRs</div>
+      </div>
+      <div class="bg-[#16191f] border border-[#262b35] p-5 rounded-lg">
+        <div class="text-xs text-slate-400 uppercase tracking-wider mb-1">IPs Dinámicas Resueltas</div>
+        <div class="text-3xl font-bold mono text-amber-400" x-text="status.total_resolved_ips || 0">0</div>
+        <div class="text-xs text-slate-500 mt-2 mono">En ventana deslizante</div>
+      </div>
+      <div class="bg-[#16191f] border border-[#262b35] p-5 rounded-lg">
+        <div class="text-xs text-slate-400 uppercase tracking-wider mb-1">Ventana Deslizante</div>
+        <div class="text-3xl font-bold mono text-slate-200"><span x-text="status.sliding_window_seconds || 3600">3600</span>s</div>
+        <div class="text-xs text-slate-500 mt-2 mono">TTL dinámico extendido</div>
+      </div>
+    </div>
+
+    <!-- Actions & Quick Controls -->
+    <div class="bg-[#16191f] border border-[#262b35] p-6 rounded-lg flex flex-col md:flex-row items-center justify-between gap-4">
+      <div>
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-200">Reconciliación de Rutas</h2>
+        <p class="text-xs text-slate-400 mt-1">Sincroniza el estado de objetivos y resuelve dominios contra el router configurado.</p>
+      </div>
+      <div class="flex items-center space-x-3">
+        <button
+          @click="triggerSync()"
+          :disabled="isSyncing"
+          class="px-4 py-2 bg-[#f59e0b] hover:bg-amber-500 text-slate-950 font-semibold text-xs tracking-wider uppercase rounded shadow transition disabled:opacity-50">
+          <span x-show="!isSyncing">Sincronizar Ahora</span>
+          <span x-show="isSyncing">Sincronizando...</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Active Routes Grid -->
+    <div class="bg-[#16191f] border border-[#262b35] rounded-lg overflow-hidden">
+      <div class="px-6 py-4 border-b border-[#262b35] flex items-center justify-between">
+        <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-300">Rutas Activas en Router</h2>
+        <span class="text-xs mono text-slate-500" x-text="'Total: ' + activeRoutes.length"></span>
+      </div>
+      <div class="p-6">
+        <template x-if="activeRoutes.length === 0">
+          <div class="text-center py-8 text-slate-500 mono text-xs">
+            Sin rutas activas inyectadas. Añade un objetivo o feed y sincroniza.
+          </div>
+        </template>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mono text-xs">
+          <template x-for="route in activeRoutes" :key="route">
+            <div class="bg-[#0d0f12] border border-[#262b35] px-3 py-2 rounded text-[#10b981] flex items-center justify-between">
+              <span x-text="route"></span>
+              <span class="w-1.5 h-1.5 rounded-full bg-[#10b981]"></span>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer Credits -->
+  <footer class="border-t border-[#262b35] bg-[#0d0f12] px-6 py-4 text-center mono text-xs text-slate-500">
+    TeByPass v0.1.0 &bull; Reconocimiento y agradecimiento a <strong class="text-slate-400">jcastro/stopliga</strong> y la comunidad <strong class="text-slate-400">hayahora.futbol</strong>.
+  </footer>
+
+  <script>
+    function dashboard() {
+      return {
+        status: {},
+        activeRoutes: [],
+        isSyncing: false,
+        async init() {
+          await this.loadData();
+          setInterval(() => this.loadData(), 10000);
+        },
+        async loadData() {
+          try {
+            const statusRes = await fetch('/api/v1/status');
+            if (statusRes.ok) {
+              this.status = await statusRes.json();
+            }
+            const routesRes = await fetch('/api/v1/routes/active');
+            if (routesRes.ok) {
+              this.activeRoutes = await routesRes.json();
+            }
+          } catch (e) {
+            console.error('Error fetching dashboard telemetry', e);
+          }
+        },
+        async triggerSync() {
+          this.isSyncing = true;
+          try {
+            const res = await fetch('/api/v1/sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ force: false })
+            });
+            await this.loadData();
+          } catch (e) {
+            console.error('Error during sync', e);
+          } finally {
+            this.isSyncing = false;
+          }
+        }
+      }
+    }
+  </script>
+</body>
+</html>

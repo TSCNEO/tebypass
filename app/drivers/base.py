@@ -1,0 +1,84 @@
+"""Abstract base classes and contracts for router drivers."""
+
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from datetime import datetime
+from enum import StrEnum
+from typing import Any
+
+
+class DriverHealth(StrEnum):
+    """Operational health state of a router driver."""
+
+    HEALTHY = "healthy"
+    DEGRADED = "degraded"
+    UNHEALTHY = "unhealthy"
+
+
+@dataclass(frozen=True)
+class TargetCIDR:
+    """Represents a validated IP prefix target for routing."""
+
+    cidr: str
+    target_id: str
+    description: str = ""
+    expires_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class SyncResult:
+    """Outcome report of a route reconciliation operation."""
+
+    driver_name: str
+    added_count: int
+    removed_count: int
+    total_active: int
+    duration_ms: float
+    success: bool
+    error_message: str | None = None
+
+
+@dataclass(frozen=True)
+class DriverStatus:
+    """Current state and telemetry of a router driver."""
+
+    driver_name: str
+    health: DriverHealth
+    active_routes_count: int
+    last_sync: datetime | None = None
+    details: dict[str, Any] = field(default_factory=dict)
+
+
+class BaseRouterDriver(ABC):
+    """Abstract interface that all router drivers must implement."""
+
+    driver_name: str = "base"
+
+    @abstractmethod
+    async def initialize(self) -> None:
+        """Initialize driver resources, network sessions, or sockets."""
+        pass
+
+    @abstractmethod
+    async def get_current_routes(self) -> set[str]:
+        """Query and return the set of currently configured route CIDRs."""
+        pass
+
+    @abstractmethod
+    async def sync_routes(
+        self,
+        to_add: set[TargetCIDR],
+        to_remove: set[str],
+    ) -> SyncResult:
+        """Apply incremental route changes idempotently."""
+        pass
+
+    @abstractmethod
+    async def health_check(self) -> DriverStatus:
+        """Perform a connectivity check and return operational status."""
+        pass
+
+    @abstractmethod
+    async def close(self) -> None:
+        """Release open connections, file descriptors, or background tasks."""
+        pass
