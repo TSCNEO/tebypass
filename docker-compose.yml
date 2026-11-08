@@ -15,6 +15,7 @@ services:
       - TEBYPASS_DATABASE_URL=${TEBYPASS_DATABASE_URL:-sqlite+aiosqlite:////data/tebypass.db}
       - TEBYPASS_ROUTER_TYPE=${TEBYPASS_ROUTER_TYPE:-mock}
       - TEBYPASS_SYNC_INTERVAL_SECONDS=${TEBYPASS_SYNC_INTERVAL_SECONDS:-300}
+      - TEBYPASS_GIT_COMMIT=${TEBYPASS_GIT_COMMIT:-}
     volumes:
       - tebypass-data:/data
 
