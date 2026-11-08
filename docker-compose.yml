@@ -7,12 +7,14 @@ services:
     restart: unless-stopped
     ports:
       - "${TEBYPASS_PORT:-9384}:9384"
+    env_file:
+      - path: .env
+        required: false
     environment:
-      - TEBYPASS_PORT=9384
-      - TEBYPASS_DATABASE_URL=sqlite+aiosqlite:////data/tebypass.db
-      - TEBYPASS_ROUTER_TYPE=mock
-      - TEBYPASS_SYNC_INTERVAL_SECONDS=300
-      - TEBYPASS_CACHE_TTL_HOURS=6
+      - TEBYPASS_PORT=${TEBYPASS_PORT:-9384}
+      - TEBYPASS_DATABASE_URL=${TEBYPASS_DATABASE_URL:-sqlite+aiosqlite:////data/tebypass.db}
+      - TEBYPASS_ROUTER_TYPE=${TEBYPASS_ROUTER_TYPE:-mock}
+      - TEBYPASS_SYNC_INTERVAL_SECONDS=${TEBYPASS_SYNC_INTERVAL_SECONDS:-300}
     volumes:
       - tebypass-data:/data
 
