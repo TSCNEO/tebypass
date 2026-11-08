@@ -20,7 +20,11 @@ class UniFiRouterDriver(BaseRouterDriver):
     driver_name: str = "unifi"
 
     def __init__(self) -> None:
-        self.controller_url = settings.unifi_controller_url
+        url = settings.unifi_controller_url
+        if url and not url.startswith(("http://", "https://")):
+            url = f"https://{url}"
+        self.controller_url = url
+        self.api_key = settings.unifi_api_key
         self.username = settings.unifi_username
         self.password = settings.unifi_password
         self.site = settings.unifi_site

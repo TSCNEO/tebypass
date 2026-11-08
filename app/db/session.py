@@ -13,10 +13,17 @@ from sqlalchemy.ext.asyncio import (
 
 from app.core.config import settings
 
-db_path = Path(settings.db_path)
-db_path.parent.mkdir(parents=True, exist_ok=True)
-
-DATABASE_URL = f"sqlite+aiosqlite:///{settings.db_path}"
+if settings.database_url:
+    DATABASE_URL = settings.database_url
+    if DATABASE_URL.startswith("sqlite+aiosqlite:///"):
+        # Handle 4 slashes for absolute path or 3 slashes for relative path
+        raw_path = DATABASE_URL.split("sqlite+aiosqlite:///")[-1]
+        if raw_path:
+            Path(raw_path).parent.mkdir(parents=True, exist_ok=True)
+else:
+    db_path = Path(settings.db_path)
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    DATABASE_URL = f"sqlite+aiosqlite:///{settings.db_path}"
 
 engine: AsyncEngine = create_async_engine(
     DATABASE_URL,
