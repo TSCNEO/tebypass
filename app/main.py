@@ -92,3 +92,9 @@ async def dashboard_view(request: Request) -> Any:
             "version": get_version_string(),
         },
     )
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run("app.main:app", host=settings.host, port=settings.port, reload=False)
