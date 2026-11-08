@@ -70,12 +70,17 @@ class UniFiRouterDriver(BaseRouterDriver):
 
     async def health_check(self) -> DriverStatus:
         """Inspect UniFi controller connectivity and credentials."""
-        is_configured = bool(self.controller_url and self.username and self.password)
+        is_configured = bool(
+            self.controller_url and (self.api_key or (self.username and self.password))
+        )
         details: dict[str, Any] = {
             "controller_url": self.controller_url or "not_configured",
             "group_name": self.group_name,
             "site": self.site,
             "configured": is_configured,
+            "auth_method": "api_key"
+            if self.api_key
+            else ("basic_auth" if self.username else "none"),
         }
         health = DriverHealth.HEALTHY if is_configured else DriverHealth.DEGRADED
         return DriverStatus(
