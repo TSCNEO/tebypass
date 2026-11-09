@@ -31,7 +31,9 @@ terminate() {
 trap terminate SIGINT SIGTERM
 
 # Kernel forwarding and base rules must be valid before accepting control commands.
-sysctl -w net.ipv4.ip_forward=1 >/dev/null
+if [ "$(cat /proc/sys/net/ipv4/ip_forward)" != "1" ]; then
+    sysctl -w net.ipv4.ip_forward=1 >/dev/null
+fi
 nft -f /etc/nftables/tebypass.conf
 # The controller installs fail-closed policy routing and owns tunnel reloads.
 
