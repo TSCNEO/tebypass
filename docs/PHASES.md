@@ -89,3 +89,17 @@ Validado con **112 tests**, Ruff, formato, Mypy y sintaxis JavaScript. Desplegad
 Se comprobaron esquema HTTPS, cookie Secure, guardado autenticado 200, origen ajeno 403
 y ayuda en login. Aplicación y rollback se prueban con Docker simulado; no se rompió
 voluntariamente el acceso de producción para probar recuperación.
+
+## Reconocimiento automático del acceso web
+
+ADR-016 sustituye la necesidad del asistente para usar la web: el login incorpora la
+URL del navegador, validada contra Origin y Host, a una sesión firmada. No fija un origen
+global por primera visita ni amplía confianza en proxies. Sesiones antiguas adoptan el
+nuevo comportamiento al iniciar sesión de nuevo; el panel ofrece esa acción.
+
+Validado con **117 tests**, Ruff, formato, Mypy y sintaxis JavaScript. El build `610e7ac`
+se desplegó retirando el ajuste manual de confianza del proxy. Sobre Traefik real, con
+HTTP interno confirmado: login 200 con cookie Secure y guardado 200. Origen ajeno y
+Origin ausente reciben 403. La prueba inicial asumía un backend que ya no estaba
+seleccionado; la comprobación posterior observó UniFi saludable sin modificar su selección.
+No se recreó el gateway ni se modificaron credenciales o parámetros de routing.
