@@ -572,7 +572,7 @@
             <label class="field">Subir o pegar tu wg0.conf</label>
             <input type="file" accept=".conf,.txt" class="!py-2 !text-xs" @change="readWgFile($event)">
             <textarea rows="8" class="mono !text-xs mt-2" x-model="wgContent"
-                      placeholder="[Interface]&#10;PrivateKey = ...&#10;Address = 10.0.0.2/32&#10;&#10;[Peer]&#10;PublicKey = ...&#10;Endpoint = vpn.example.org:51820&#10;AllowedIPs = 0.0.0.0/0"></textarea>
+                      placeholder="[Interface]&#10;PrivateKey = ...&#10;Address = 192.0.2.2/32&#10;&#10;[Peer]&#10;PublicKey = ...&#10;Endpoint = vpn.example.org:51820&#10;AllowedIPs = 0.0.0.0/0"></textarea>
             <p class="text-[11px] text-slate-600 mt-1">Solo lo usan los modos Gateway virtual. La clave privada se guarda en el volumen de datos con permisos 600.</p>
           </div>
           <div class="flex items-center gap-2">

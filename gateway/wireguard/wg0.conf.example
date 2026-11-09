@@ -1,11 +1,11 @@
 [Interface]
 # Example WireGuard interface configuration (RFC neutral)
 PrivateKey = aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=
-Address = 10.0.0.2/32
-DNS = 1.1.1.1
+Address = 192.0.2.2/32
+DNS = 192.0.2.53
 
 [Peer]
 PublicKey = bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb=
-Endpoint = 198.51.100.10:51820
+Endpoint = 203.0.113.10:51820
 AllowedIPs = 0.0.0.0/0
 PersistentKeepalive = 25

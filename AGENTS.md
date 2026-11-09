@@ -136,13 +136,13 @@ Cuando un agente de IA asista a un usuario en el despliegue del modo **Gateway V
    - Inspeccionar interfaces de red disponibles (`ip -br link` o `ip -br addr`).
    - Identificar cuál es la interfaz conectada a la LAN doméstica física (habitualmente `eth0`, `enp3s0` o un bridge `vmbr0` en Proxmox).
 2. **Identificar subred y puerta de enlace**:
-   - Detectar la subred local (ej. `192.168.1.0/24`) y la IP del router principal (ej. `192.168.1.1`).
+   - Detectar la subred local (ej. `192.0.2.0/24`) y la IP del router principal (ej. `192.0.2.1`).
 
 ### 7.2 Fase 2: Selección y Escaneo de IP Libre
 1. **Buscar una dirección IP disponible**:
    - Preguntar al usuario qué IP desea utilizar O proponerle escanear la red local en busca de una IP desocupada mediante barrido ICMP/ARP rápido:
      ```bash
-     for ip in $(seq 20 35); do ping -c 1 -W 1 192.168.1.$ip >/dev/null 2>&1 || echo "192.168.1.$ip LIBRE"; done
+     for ip in $(seq 20 35); do ping -c 1 -W 1 192.0.2.$ip >/dev/null 2>&1 || echo "192.0.2.$ip LIBRE"; done
      ```
    - Recomendar siempre una dirección fuera del rango dinámico del pool DHCP del router para evitar solapamientos.
 
@@ -157,14 +157,14 @@ Cuando un agente de IA asista a un usuario en el despliegue del modo **Gateway V
 1. **Crear la red macvlan de Docker**:
    ```bash
    docker network create -d macvlan \
-     --subnet="192.168.1.0/24" \
-     --gateway="192.168.1.1" \
+     --subnet="192.0.2.0/24" \
+     --gateway="192.0.2.1" \
      -o parent="eth0" \
      tebypass-lan
    ```
 2. **Configurar `.env`**:
    ```bash
-   TEBYPASS_GATEWAY_IP=192.168.1.26
+   TEBYPASS_GATEWAY_IP=192.0.2.26
    TEBYPASS_GATEWAY_MAC=02:42:c0:a8:01:1a
    TEBYPASS_LAN_NETWORK=tebypass-lan
    ```

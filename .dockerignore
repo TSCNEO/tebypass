@@ -16,3 +16,8 @@ node_modules
 tests
 docs
 scripts
+
+gateway/wireguard/*.conf
+**/*.key
+**/*.pem
+**/*.crt
