@@ -30,11 +30,9 @@ class NativeDNSResolver:
 
         try:
             # Delegate to system getaddrinfo via default executor (non-blocking)
-            addr_info = await loop.getaddrinfo(
-                clean_fqdn,
-                None,
-                family=family,
-                type=socket.SOCK_STREAM,
+            addr_info = await asyncio.wait_for(
+                loop.getaddrinfo(clean_fqdn, None, family=family, type=socket.SOCK_STREAM),
+                timeout=5,
             )
         except socket.gaierror as ex:
             logger.warning("DNS resolution failed for '%s': %s", clean_fqdn, ex)

@@ -128,3 +128,5 @@ Ese contenedor no comparte el namespace de red del host ni volúmenes de producc
 Comprueba reglas nft reales, descarte de tráfico seleccionado sin túnel, recorrido normal
 para no seleccionado, fail-open explícito y vaciado del set. No sustituye una prueba con
 clientes LAN y un proveedor WireGuard real.
+
+Base del sidecar: Alpine 3.24, rama con soporte según [el calendario oficial](https://alpinelinux.org/releases/).

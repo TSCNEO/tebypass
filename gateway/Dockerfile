@@ -1,4 +1,4 @@
-FROM alpine:3.20
+FROM alpine:3.24
 
 LABEL maintainer="TeByPass Contributors"
 LABEL description="Alpine Linux L3 Split-Routing Gateway Sidecar with nftables and WireGuard"

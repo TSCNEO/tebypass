@@ -91,8 +91,10 @@ class StopligaAdapter(BaseRouterDriver):
         matches = [route for route in routes if route.get("name") == self.config.route_name]
         if len(matches) > 1:
             raise RuntimeError("Duplicate managed Omada policy")
-        if not matches or not matches[0].get("status"):
+        if not matches or matches[0].get("status") is False:
             return set()
+        if matches[0].get("status") is not True:
+            raise RuntimeError("Omada policy does not expose a boolean status")
         groups = client.list_groups(site.site_id)
         by_id = {str(group["groupId"]): group for group in groups}
         destinations = {key: _group_destinations(group) for key, group in by_id.items()}

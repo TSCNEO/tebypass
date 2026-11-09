@@ -45,7 +45,11 @@ class SlidingWindowCache:
         """Add a resolved IP or slide forward its expiration if already known."""
         async with self._lock:
             now = datetime.now(UTC)
-            extension = window_extension_seconds or self.default_window_seconds
+            extension = (
+                self.default_window_seconds
+                if window_extension_seconds is None
+                else window_extension_seconds
+            )
             key = self._make_key(fqdn, ip_address)
 
             # Slide expiration: max(now + dns_ttl, now + window_extension)
