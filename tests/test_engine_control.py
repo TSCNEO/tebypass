@@ -79,8 +79,28 @@ async def test_failed_purge_does_not_claim_success_or_pause(
     client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     driver = MockRouterDriver()
-    monkeypatch.setattr("app.api.settings.get_driver", lambda: driver)
+    monkeypatch.setattr("app.core.settings_service.get_driver", lambda: driver)
     with patch.object(driver, "teardown", AsyncMock(side_effect=RuntimeError("offline"))):
         response = await client.post("/api/v1/settings/router/purge")
     assert response.status_code == 502
     assert settings.routing_enabled
+
+
+async def test_manual_schedule_can_be_enabled_without_restart(db_ready: None) -> None:
+    settings.sync_interval_seconds = 0
+    engine = ReconciliationEngine(driver=MockRouterDriver())
+    executed = asyncio.Event()
+
+    async def cycle(force: bool = False) -> None:
+        executed.set()
+
+    with patch.object(engine, "reconcile", side_effect=cycle):
+        engine.start_periodic_sync()
+        try:
+            await asyncio.sleep(0)
+            assert not executed.is_set()
+            settings.sync_interval_seconds = 60
+            engine.wake()
+            await asyncio.wait_for(executed.wait(), timeout=1)
+        finally:
+            await engine.stop()

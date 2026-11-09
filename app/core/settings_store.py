@@ -55,6 +55,9 @@ _NON_EDITABLE_KEYS: Final[set[str]] = {
     "db_path",
     "secret_key",
     "master_pin_hash",
+    "gateway_nft_set_name",
+    "gateway_control_socket",
+    "wireguard_config_path",
 }
 
 _TRUTHY: Final[set[str]] = {"1", "true", "yes", "on"}

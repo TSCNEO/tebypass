@@ -65,6 +65,9 @@ async def create_feed(
     db.add(feed)
     await db.commit()
 
+    from app.core.runtime import trigger_reconciliation
+
+    await trigger_reconciliation(force=True)
     return _to_response(await _load_feed(db, feed.id))
 
 

@@ -154,7 +154,7 @@ async def test_unifi_teardown_and_purge_endpoint(client: httpx.AsyncClient) -> N
     assert len(driver._active_routes) == 0
 
     # Test purge API endpoint
-    with patch("app.api.settings.get_driver", return_value=driver):
+    with patch("app.core.settings_service.get_driver", return_value=driver):
         resp = await client.post("/api/v1/settings/router/purge")
         assert resp.status_code == 200
         data = resp.json()

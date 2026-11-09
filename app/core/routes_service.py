@@ -235,7 +235,7 @@ async def bulk_import_targets(
         await _validate_folder(db, payload.folder_id)
 
     manager = FeedManager()
-    existing_query = select(Target.value)
+    existing_query = select(Target.value).where(Target.feed_id.is_(None))
     existing_keys = {
         dedupe_key(value) for value in (await db.execute(existing_query)).scalars().all()
     }

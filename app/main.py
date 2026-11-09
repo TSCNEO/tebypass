@@ -19,8 +19,9 @@ from app.api import (
     settings_router,
     status_router,
 )
-from app.core.auth import AdminMiddleware, admin_token
-from app.core.auth import router as auth_router
+from app.api.auth import AdminMiddleware
+from app.api.auth import router as auth_router
+from app.core.auth import admin_token
 from app.core.bootstrap import seed_default_feed
 from app.core.config import settings
 from app.core.runtime import get_engine

@@ -5,7 +5,7 @@ import errno
 import socket
 import subprocess
 
-from controller import run_command
+from controller import dispatch, run_command
 from wireguard_runtime import WireGuardRuntime
 
 
@@ -17,9 +17,10 @@ async def main() -> None:
     checked("nft", "-f", "/etc/nftables/tebypass.conf")
     runtime = WireGuardRuntime(run_command)
     await runtime.policy(True)
-    checked(
-        "nft", "add", "element", "inet", "tebypass", "tebypass_targets", "{", "198.51.100.7", "}"
-    )
+    result = await dispatch({"cmd": "sync", "add": ["198.51.100.7/32"], "remove": []})
+    assert result.get("ok"), result
+    listed = await dispatch({"cmd": "list"})
+    assert listed.get("elements") == ["198.51.100.7/32"], listed
     route = subprocess.run(
         ["ip", "route", "get", "198.51.100.7", "mark", "0x100"], capture_output=True
     )
@@ -36,7 +37,8 @@ async def main() -> None:
     await runtime.policy(False)
     checked("ip", "route", "get", "198.51.100.7", "mark", "0x100")
     await runtime.policy(True)
-    checked("nft", "flush", "set", "inet", "tebypass", "tebypass_targets")
+    assert (await dispatch({"cmd": "flush"})).get("ok")
+    assert (await dispatch({"cmd": "list"})).get("elements") == []
     print(
         "Gateway kernel checks passed: selected fail-closed, normal main route, explicit fail-open, flush"
     )

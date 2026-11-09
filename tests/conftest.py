@@ -30,10 +30,17 @@ async def _reset_database() -> None:
 async def db_ready(monkeypatch: pytest.MonkeyPatch) -> AsyncGenerator[None, None]:
     """Provide a clean database and restore the in-memory settings afterwards."""
     import asyncio
+    from unittest.mock import AsyncMock
 
     import app.core.runtime
 
     monkeypatch.setattr("app.core.engine.ROUTING_LOCK", asyncio.Lock())
+    monkeypatch.setattr(
+        "app.core.feeds_sync.download", AsyncMock(side_effect=RuntimeError("offline test feed"))
+    )
+    monkeypatch.setattr(
+        "app.core.resolver.NativeDNSResolver.resolve_fqdn", AsyncMock(return_value=[])
+    )
     from app.core.config import settings
     from app.core.settings_store import EDITABLE_KEYS
     from app.drivers import invalidate_driver

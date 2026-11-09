@@ -80,7 +80,7 @@
 
       <div class="hidden md:flex items-center gap-5 mono text-[11px] text-slate-500">
         <span>OBJETIVOS <b class="text-slate-200" x-text="stats.total_targets"></b></span>
-        <span>IPs ENRUTADAS <b class="text-slate-200" x-text="stats.active_routes"></b></span>
+        <span>PREFIJOS ACTIVOS <b class="text-slate-200" x-text="stats.active_routes"></b></span>
         <span>ÚLT. SYNC <b class="text-slate-200" x-text="lastSyncLabel()"></b></span>
       </div>
 
@@ -210,7 +210,7 @@
               <th class="text-left px-3 py-2 font-normal">Lista</th>
               <th class="text-left px-3 py-2 font-normal">IPs resueltas</th>
               <th class="text-left px-3 py-2 font-normal">Nota</th>
-              <th class="text-center px-3 py-2 font-normal">Activo</th>
+              <th class="text-center px-3 py-2 font-normal">Habilitado</th>
               <th class="text-right px-5 py-2 font-normal">Acciones</th>
             </tr>
           </thead>
@@ -232,8 +232,8 @@
                 <td class="px-3 py-3">
                   <div class="flex items-center gap-2">
                     <span class="mono text-xs" :class="t.resolved_count > 0 ? 'text-emerald-400' : 'text-slate-600'"
-                          x-text="t.resolved_count > 0 ? t.resolved_count + ' IPs' : 'sin resolver'"></span>
-                    <button class="text-slate-600 hover:text-amber-400 text-[11px] mono" @click="resolveNow(t)" :disabled="busy.resolve === t.id" title="Resolver ahora">
+                          x-text="t.destination_type === 'cidr' ? 'prefijo directo' : t.resolved_count > 0 ? t.resolved_count + ' IPs' : 'sin resolver'"></span>
+                    <button x-show="t.destination_type === 'fqdn'" class="text-slate-600 hover:text-amber-400 text-[11px] mono" @click="resolveNow(t)" :disabled="busy.resolve === t.id" title="Resolver ahora">
                       <span x-show="busy.resolve !== t.id">↻</span>
                       <span x-show="busy.resolve === t.id">…</span>
                     </button>
@@ -256,7 +256,7 @@
     </section>
 
     <footer class="text-center text-[11px] text-slate-600 py-4 space-y-1">
-      <div>TeByPass <span class="mono" x-text="ver"></span> · Enrutamiento selectivo: solo lo bloqueado va por la VPN.</div>
+      <div>TeByPass <span class="mono" x-text="ver"></span> · Enrutamiento selectivo hacia la salida elegida.</div>
       <div>Gracias a <strong class="text-slate-500">jcastro/stopliga</strong> y a la comunidad <strong class="text-slate-500">hayahora.futbol</strong> por mantener las listas abiertas.</div>
     </footer>
   </main>
