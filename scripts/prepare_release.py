@@ -18,7 +18,8 @@ def prepare(version: str, output: Path, project: Path = PROJECT_DIR) -> None:
         "${TEBYPASS_IMAGE_TAG:-latest}", "${TEBYPASS_IMAGE_TAG:-" + version + "}"
     )
     (output / "docker-compose.yml").write_text(compose)
-    for name in (".env.example", "LICENSE", "THIRD_PARTY_NOTICES.md"):
+    shutil.copyfile(project / ".env.example", output / "env.example")
+    for name in ("LICENSE", "THIRD_PARTY_NOTICES.md"):
         shutil.copyfile(project / name, output / name)
     (output / "INSTALL.md").write_text(
         f"# TeByPass {version}\n\n"
@@ -33,7 +34,7 @@ def prepare(version: str, output: Path, project: Path = PROJECT_DIR) -> None:
     )
     names = [
         "docker-compose.yml",
-        ".env.example",
+        "env.example",
         "LICENSE",
         "THIRD_PARTY_NOTICES.md",
         "INSTALL.md",

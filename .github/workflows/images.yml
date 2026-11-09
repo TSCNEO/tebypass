@@ -204,9 +204,17 @@ jobs:
           RELEASE_TAG: ${{ needs.metadata.outputs.tag }}
         run: |
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" dist/release/* dist/release/.env.example --clobber
+            gh release upload "$RELEASE_TAG" dist/release/* --clobber
           else
             flags=(--draft)
             if [[ "$RELEASE_TAG" == *-* ]]; then flags+=(--prerelease); fi
-            gh release create "$RELEASE_TAG" dist/release/* dist/release/.env.example --verify-tag "${flags[@]}" --title "TeByPass $RELEASE_TAG" --notes-file docs/RELEASE_NOTES.md
+            gh release create "$RELEASE_TAG" dist/release/* --verify-tag "${flags[@]}" --title "TeByPass $RELEASE_TAG" --notes-file docs/RELEASE_NOTES.md
           fi
+      - name: Verify downloaded release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.metadata.outputs.tag }}
+        run: |
+          gh release download "$RELEASE_TAG" --dir dist/downloaded
+          cd dist/downloaded
+          sha256sum -c SHA256SUMS

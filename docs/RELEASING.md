@@ -22,7 +22,7 @@ versión embebida y pruebas reales del gateway. Solo después promueve canales/v
 | Referencia | Etiquetas |
 |---|---|
 | main | edge, sha de 12 caracteres |
-| v0.2.0-rc.2 | 0.2.0-rc.2; no latest |
+| v0.2.0-rc.3 | 0.2.0-rc.3; no latest |
 | v0.2.0 | 0.2.0, latest |
 
 La versión base del tag debe coincidir con pyproject.toml. No reutilices tags de release
@@ -31,7 +31,8 @@ servidor desde Actions. Las pruebas de ejecución de CI son amd64; arm64 se comp
 se publica, sin afirmar validación de hardware arm64.
 
 Con tag, genera un artefacto de instalación y crea un **borrador de GitHub Release** con
-Compose fijado a esa versión, .env.example opcional, INSTALL.md, licencias y SHA256SUMS.
+Compose fijado a esa versión, env.example opcional, INSTALL.md, licencias y SHA256SUMS.
+Descarga de nuevo los assets publicados y verifica sus checksums antes de terminar.
 Si la release ya existe, adjunta/actualiza esos assets. Main no crea releases.
 
 ## Antes de abrir la primera release
@@ -53,8 +54,8 @@ Si la release ya existe, adjunta/actualiza esos assets. Main no crea releases.
 Ejemplo del mantenedor para una candidata, no ejecutado como parte de esta preparación:
 
 ```sh
-git tag -a v0.2.0-rc.2 -m 'TeByPass 0.2.0 release candidate 1'
-git push origin v0.2.0-rc.2
+git tag -a v0.2.0-rc.3 -m 'TeByPass 0.2.0 release candidate 1'
+git push origin v0.2.0-rc.3
 ```
 
 GitHub limita el cambio inicial de visibilidad de paquetes a sus ajustes; el flujo no

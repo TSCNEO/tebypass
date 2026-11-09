@@ -14,6 +14,8 @@ def test_bundle_pins_version_and_has_verifiable_checksums(tmp_path: Path) -> Non
     assert compose.count("${TEBYPASS_IMAGE_TAG:-0.2.0-rc.1}") == 2
     assert "build:" not in compose
     assert not (tmp_path / ".env").exists()
+    assert (tmp_path / "env.example").exists()
+    assert not (tmp_path / ".env.example").exists()
     for line in (tmp_path / "SHA256SUMS").read_text().splitlines():
         digest, name = line.split("  ", 1)
         assert hashlib.sha256((tmp_path / name).read_bytes()).hexdigest() == digest
