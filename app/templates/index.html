@@ -110,6 +110,13 @@
       Señal comunitaria: <b class="text-amber-400" x-text="!feed || !feed.enabled ? 'PAUSADA' : feed.blocked === null ? 'SIN CONFIRMAR' : feed.blocked ? 'BLOQUEO ACTIVO' : 'SIN BLOQUEOS'"></b>
       <span x-show="feed && feed.last_error" class="text-red-400" x-text="feed ? feed.last_error : ''"></span>
     </div>
+    <section x-show="proxySetupNeeded" class="panel rounded-md p-4 text-sm border-amber-600" role="alert">
+      <p class="text-amber-300">Hay que completar el acceso HTTPS del proxy.</p>
+      <p class="text-xs text-slate-400 mt-2">Ejecuta este comando en la carpeta del proyecto del servidor, o pásaselo a tu LLM con acceso a Docker. El asistente detecta la conexión y verifica el cambio.</p>
+      <code class="block mono text-xs break-all mt-3" x-text="proxySetupCommand()"></code>
+      <button class="btn btn-primary rounded px-3 py-2 mt-3 text-xs" @click="navigator.clipboard.writeText(proxySetupCommand()); toast('Comando copiado')">Copiar comando</button>
+      <a class="ml-3 text-xs text-amber-400 underline" href="/login">Ayuda de instalación</a>
+    </section>
     <!-- ===================== FEED COMUNITARIO ===================== -->
     <section class="panel rounded-lg overflow-hidden">
       <div class="px-5 py-4 border-b edge flex items-start gap-4 flex-wrap">
@@ -608,6 +615,7 @@ function tebypass() {
     feed: null,
     settings: {},
     settingsLoaded: false,
+    proxySetupNeeded: false,
     unifiVpnNetworks: [],
     busyVpn: false,
     wg: { configured: false, peers: 0, uploaded_at: null, preview: '' },
@@ -638,6 +646,11 @@ function tebypass() {
       setInterval(() => this.loadStatus(), 20000);
     },
 
+    proxySetupCommand() {
+      const quoted = "'" + window.location.origin.replaceAll("'", "'\\''") + "'";
+      return 'python3 scripts/setup_proxy.py ' + quoted + ' --apply';
+    },
+
     async api(method, path, body) {
       const opts = { method: method, headers: { 'Content-Type': 'application/json' } };
       if (body !== undefined) opts.body = JSON.stringify(body);
@@ -648,6 +661,7 @@ function tebypass() {
       let data = null;
       try { data = text ? JSON.parse(text) : null; } catch (e) { data = null; }
       if (!res.ok) {
+        if (data && data.code === 'proxy_setup_required') this.proxySetupNeeded = true;
         const detail = (data && (data.detail || data.message)) || ('HTTP ' + res.status);
         throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail));
       }

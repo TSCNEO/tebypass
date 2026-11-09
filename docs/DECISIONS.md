@@ -300,3 +300,17 @@ los ajustes de routing de SQLite. No se habilita confianza indiscriminada en cab
 La protección CSRF usa el origen efectivo y puertos predeterminados normalizados, sin
 comparar rutas del proxy. Un origen ajeno y una cabecera de esquema enviada desde una
 conexión no confiable siguen rechazándose. HTTPS reconocido produce cookie Secure en login.
+
+## ADR-015: Configuración guiada del acceso HTTPS
+
+**Aceptado.** La confianza del proxy sigue siendo bootstrap del host, pero no requiere
+que el usuario conozca la dirección interna observada por Docker. Un asistente estándar
+Python recibe la URL pública y consulta `/healthz`, que expone el esquema efectivo.
+Cuando HTTPS externo aparece como HTTP interno, una petición con marcador aleatorio
+permite identificar la conexión exacta en los logs de Uvicorn. Sin evidencia no se aplica.
+
+El modo por defecto solo diagnostica; `--apply` conserva ajustes, crea copia privada,
+recrea exclusivamente la aplicación y verifica. Si falla restaura la configuración y
+recrea de nuevo, informando si la recuperación falla. No usa credenciales administrativas
+ni habilita confianza global. Login y errores de guardado ofrecen instrucciones para
+usuario o LLM. No configura certificados ni crea rutas del proxy: estos deben existir.

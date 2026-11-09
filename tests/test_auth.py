@@ -56,6 +56,7 @@ async def test_tls_proxy_accepts_same_origin_and_sets_secure_cookie(db_ready: No
         response = await client.post("/auth/session", json={"token": admin_token()})
         assert response.status_code == 200
         assert "Secure" in response.headers["set-cookie"]
+        assert (await client.get("/healthz")).json()["scheme"] == "https"
         for origin in ("https://tebypass.example.org", "https://tebypass.example.org:443"):
             response = await client.put("/api/v1/settings", json={}, headers={"Origin": origin})
             assert response.status_code == 200
@@ -64,6 +65,7 @@ async def test_tls_proxy_accepts_same_origin_and_sets_secure_cookie(db_ready: No
             "https://tebypass.example.org:0",
             "https://tebypass.example.org:8443",
             "null",
+            "https://[invalid",
             "https://user@tebypass.example.org",
             "https://tebypass.example.org/path",
         ):
@@ -103,5 +105,22 @@ async def test_untrusted_peer_cannot_spoof_proxy_scheme(db_ready: None) -> None:
         await client.post("/auth/session", json={"token": admin_token()})
         response = await client.put(
             "/api/v1/settings", json={}, headers={"Origin": "https://tebypass.example.org"}
+        )
+        assert response.status_code == 403
+
+
+async def test_proxy_mismatch_gives_actionable_guidance(db_ready: None) -> None:
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app), base_url="http://tebypass.example.org"
+    ) as client:
+        await client.post("/auth/session", json={"token": admin_token()})
+        assert (await client.get("/healthz")).json()["scheme"] == "http"
+        response = await client.put(
+            "/api/v1/settings", json={}, headers={"Origin": "https://tebypass.example.org"}
+        )
+        assert response.status_code == 403
+        assert response.json()["code"] == "proxy_setup_required"
+        response = await client.put(
+            "/api/v1/settings", json={}, headers={"Origin": "https://[invalid"}
         )
         assert response.status_code == 403

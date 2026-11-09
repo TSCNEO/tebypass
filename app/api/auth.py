@@ -63,6 +63,24 @@ class AdminMiddleware(BaseHTTPMiddleware):
         if not token_ok and request.method not in {"GET", "HEAD", "OPTIONS"}:
             origin = request.headers.get("origin")
             if origin and not same_origin(origin, request):
+                try:
+                    parsed = urlsplit(origin)
+                except ValueError:
+                    return JSONResponse(
+                        {"detail": "Cross-origin request rejected"}, status_code=403
+                    )
+                if (
+                    parsed.scheme == "https"
+                    and parsed.hostname == request.url.hostname
+                    and request.url.scheme == "http"
+                ):
+                    return JSONResponse(
+                        {
+                            "code": "proxy_setup_required",
+                            "detail": "El servidor no reconoce el HTTPS del proxy. Ejecuta el asistente de acceso del servidor.",
+                        },
+                        status_code=403,
+                    )
                 return JSONResponse({"detail": "Cross-origin request rejected"}, status_code=403)
         response = await call_next(request)
         response.headers["Cache-Control"] = "no-store"

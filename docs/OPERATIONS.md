@@ -166,7 +166,33 @@ contenedores y la red de prueba; no modifica la LAN ni usa volúmenes del despli
 
 ## Traefik y otros proxies HTTPS
 
-Configura en el `.env` del host las direcciones de **conexión del proxy a la aplicación**:
+Con el proxy ya apuntando al servicio y la imagen actualizada, ejecuta desde el checkout
+Compose del servidor (Python >= 3.10 y acceso a Docker):
+
+```sh
+python3 scripts/setup_proxy.py 'https://tebypass.example.org'
+python3 scripts/setup_proxy.py 'https://tebypass.example.org' --apply
+```
+
+Solo debes indicar la URL pública real del panel. El primer comando diagnostica sin cambiar
+archivos. `--apply` configura si hace falta, recrea únicamente la aplicación y comprueba el
+HTTPS efectivo. No reinicia el gateway ni cambia la política de routing. La ayuda del login
+y el aviso de guardado rechazado muestran el comando con la URL del navegador.
+
+La salida es JSON: `ready` (ya configurado), `needs_configuration` (añadir `--apply`),
+`applied` (verificado) o `error` (salida 1). Una petición marcada identifica en los logs la
+conexión exacta del proxy; no se adivinan IPs ni se confía en toda la red. No lee ni solicita
+la clave administrativa. El certificado TLS debe ser válido y la URL accesible desde el host.
+Si no hay evidencia en los logs, se detiene con instrucciones sin aplicar cambios.
+
+Antes de modificar `.env`, crea `.env.before-proxy-setup` con permisos 0600. Conserva los
+ajustes existentes y restaura la configuración previa si falla la verificación. Si falla
+también el arranque de recuperación, avisa para revisar Docker. Las instalaciones con
+nombres distintos pueden usar `--project-dir`, `--container` y `--service`. Para automatizar
+con un agente, consulta [la guía LLM](LLM_DEPLOYMENT.md).
+
+Configuración avanzada manual: en el `.env` del host indica las direcciones de
+**conexión del proxy a la aplicación**:
 
 ```dotenv
 # Dirección de documentación; sustituye por la del proxy de tu despliegue.

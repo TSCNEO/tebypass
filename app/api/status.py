@@ -1,6 +1,6 @@
 """HTTP adapter for core services."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import status_service as service
@@ -11,8 +11,10 @@ router = APIRouter(tags=["Status"])
 
 
 @router.get("/healthz")
-async def healthz() -> dict[str, str]:
-    return await service.healthz()
+async def healthz(request: Request) -> dict[str, str]:
+    result = await service.healthz()
+    result["scheme"] = request.url.scheme
+    return result
 
 
 @router.get("/api/v1/status", response_model=SystemStatusResponse)
