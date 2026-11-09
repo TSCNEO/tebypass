@@ -87,6 +87,29 @@ En el modo gateway, el sidecar se levanta con el perfil `gateway`:
 docker compose --profile gateway up -d
 ```
 
+El sidecar necesita una **IP propia en tu LAN** para poder ser la puerta de enlace de los
+dispositivos que quieras desviar. Se consigue con una red `macvlan` sobre la interfaz del host, que
+se crea una sola vez:
+
+```bash
+docker network create -d macvlan \
+  --subnet="$TEBYPASS_LAN_SUBNET" \
+  --gateway="$TEBYPASS_LAN_GATEWAY" \
+  -o parent="$TEBYPASS_LAN_PARENT" \
+  "$TEBYPASS_LAN_NETWORK"
+```
+
+y se le asigna una dirección libre de esa subred (por ejemplo `192.0.2.26`, un placeholder RFC 5737:
+pon la real en tu `.env`):
+
+```bash
+TEBYPASS_GATEWAY_IP=192.0.2.26
+```
+
+La aplicación y el sidecar no hablan por red: comparten el volumen `/data` y se comunican por un
+socket Unix (`/data/gateway.sock`, permisos `0600`). El sidecar es el único que toca `nftables`, así
+que el contenedor de la aplicación no necesita privilegios de red.
+
 ---
 
 ## La interfaz, en cuatro ideas

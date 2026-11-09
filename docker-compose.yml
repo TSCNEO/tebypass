@@ -13,12 +13,26 @@ services:
       # lives in SQLite inside the data volume and is configured from the web interface.
       - TEBYPASS_PORT=${TEBYPASS_PORT:-9384}
       - TEBYPASS_DATABASE_URL=${TEBYPASS_DATABASE_URL:-sqlite+aiosqlite:////data/tebypass.db}
+      - TEBYPASS_GATEWAY_SOCKET=/data/gateway.sock
     volumes:
       - tebypass-data:/data
       - ./.git:/app/.git:ro
 
   # Optional Virtual Gateway sidecar for carrier router environments.
-  # Reads the WireGuard config uploaded from the web UI (same data volume).
+  # Reads the WireGuard config uploaded from the web UI (same data volume) and owns
+  # every nftables mutation. The application talks to it through /data/gateway.sock.
+  #
+  # The sidecar needs its own address on the LAN to act as the default gateway of the
+  # client devices, so it joins a pre-created macvlan network attached to the host NIC:
+  #
+  #   docker network create -d macvlan \
+  #     --subnet "${TEBYPASS_LAN_SUBNET:-192.0.2.0/24}" \
+  #     --gateway "${TEBYPASS_LAN_GATEWAY:-192.0.2.1}" \
+  #     -o parent="${TEBYPASS_LAN_PARENT:-eth0}" \
+  #     "${TEBYPASS_LAN_NETWORK:-tebypass-lan}"
+  #
+  # TEBYPASS_GATEWAY_IP must be a free address of that subnet. The defaults below are
+  # documentation placeholders (RFC 5737); set the real values in .env.
   tebypass-gateway:
     build:
       context: ./gateway
@@ -29,10 +43,21 @@ services:
       - NET_ADMIN
     sysctls:
       - net.ipv4.ip_forward=1
+    environment:
+      - TEBYPASS_GATEWAY_SOCKET=/data/gateway.sock
+      - TEBYPASS_GATEWAY_SET=${TEBYPASS_GATEWAY_SET:-tebypass_targets}
     volumes:
       - tebypass-data:/data
+    networks:
+      tebypass-lan:
+        ipv4_address: ${TEBYPASS_GATEWAY_IP:-192.0.2.26}
     profiles:
       - gateway
 
 volumes:
   tebypass-data:
+
+networks:
+  tebypass-lan:
+    external: true
+    name: ${TEBYPASS_LAN_NETWORK:-tebypass-lan}

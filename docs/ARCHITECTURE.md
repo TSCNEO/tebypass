@@ -112,7 +112,7 @@ sequenceDiagram
 ### 2.3 Capa de Drivers (`app/drivers`)
 - `base.py`: Define el contrato formal `BaseRouterDriver` y las estructuras de datos (`TargetCIDR`, `SyncResult`, `DriverStatus`).
 - `mock.py`: Implementación en memoria que simula la tabla de rutas para pruebas automatizadas y ejecución local sin hardware.
-- `virtual_gateway.py`: Driver que interactúa directamente con el sidecar de red o con el `nftables` del host para actualizar sets dinámicos.
+- `virtual_gateway.py`: Driver del sidecar de red. Orden de transporte: socket Unix `/data/gateway.sock` (preferido, el sidecar es el único que toca `nftables`), binario `nft` local (la app corre con `NET_ADMIN` en el mismo namespace), o caché emulada (tests y ejecución sin red).
 - `unifi.py`: Driver para controladores UniFi Dream Machine / Cloud Gateway mediante la API de firewall groups o rutas estáticas.
 - `mikrotik.py`: Driver para MikroTik RouterOS v7 usando la API REST `/ip/firewall/address-list`.
 
@@ -302,6 +302,36 @@ En un despliegue con el Sidecar Gateway (`gateway/`), el flujo de paquetes es es
 3. El subsistema `nftables` evalúa el paquete en la cadena `PREROUTING`. Si la IP de destino pertenece al set `@tebypass_targets`, se marca el paquete con `meta mark set 0x100`.
 4. El subsistema de routing de Linux (`ip rule`) dirige los paquetes con marca `0x100` a una tabla de rutas secundaria (`table 100`) cuyo gateway es la interfaz `wg0`.
 5. Si no coincide con el set, el paquete sigue la tabla principal y sale directamente por la conexión física del router sin cifrado ni latencia añadida.
+
+### 5.1 Direccionamiento del sidecar y plano de control
+
+El sidecar necesita una dirección propia en la LAN para poder ser la puerta de enlace de los
+dispositivos cliente, así que se conecta a una red **macvlan** creada sobre la interfaz física del
+host (`TEBYPASS_LAN_PARENT`, por defecto `eth0`) y recibe una IP libre de esa LAN
+(`TEBYPASS_GATEWAY_IP`). La aplicación sigue en la red bridge por defecto: no necesita privilegios
+de red ni compartir namespace con el sidecar.
+
+La comunicación entre ambos procesos va por un **socket Unix** dentro del volumen compartido
+`/data`, nunca por TCP: no hay puerto expuesto, no hay superficie de red y los permisos son `0600`.
+
+```
+[ tebypass (bridge) ] --/data/gateway.sock--> [ tebypass-gateway (macvlan) ] --nftables--> kernel
+```
+
+Protocolo: una línea JSON por petición y una por respuesta.
+
+| Petición | Respuesta |
+| :--- | :--- |
+| `{"cmd":"status"}` | `ok`, estado de `wg0`, edad del handshake, tabla/set de nftables y regla `fwmark` |
+| `{"cmd":"sync","add":[CIDR],"remove":[CIDR]}` | `added_count`, `removed_count`, `total_active`, `duration_ms` |
+| `{"cmd":"list"}` | `elements` activos del set |
+| `{"cmd":"flush"}` | vacía el set |
+| `{"cmd":"ping"}` | sonda de vida sin efectos secundarios |
+
+`sync` se aplica como una única transacción `nft -f` (delta mínimo). Si el set de intervalos rechaza
+el delta por solapamiento, el daemon reintenta con un reemplazo completo (`flush set` + `add`) que
+también es atómico. Todas las entradas se validan con `ipaddress` antes de llegar a `nft`, así que
+una petición no puede inyectar sintaxis.
 
 ---
 

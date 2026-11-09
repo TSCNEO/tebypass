@@ -8,16 +8,19 @@ RUN apk add --no-cache \
     iproute2 \
     wireguard-tools \
     iptables \
+    python3 \
     bash \
     ca-certificates \
-    tzdata
+    tzdata \
+    curl
 
 COPY entrypoint.sh /entrypoint.sh
+COPY controller.py /controller.py
 COPY nftables.conf /etc/nftables/tebypass.conf
 
-RUN chmod +x /entrypoint.sh
+RUN chmod +x /entrypoint.sh /controller.py
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-    CMD nft list table inet tebypass > /dev/null || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD nft list table inet tebypass > /dev/null && test -S "${TEBYPASS_GATEWAY_SOCKET:-/data/gateway.sock}" || exit 1
 
 ENTRYPOINT ["/entrypoint.sh"]

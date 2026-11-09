@@ -194,3 +194,27 @@ Adoptar la **GNU Affero General Public License v3 (AGPL-3.0-or-later)** para el 
   - Desincentiva el empaquetado privativo con fines de lucro por parte de empresas comerciales.
 - **Negativas / Trade-offs**:
   - Incompatible con proyectos o librerías que requieran integración en software propietario cerrado.
+
+---
+
+## ADR-010: Sidecar con IP LAN propia (macvlan) y plano de control por socket Unix
+
+### Estado
+**Aceptado**
+
+### Contexto
+Para que el gateway virtual sirva a dispositivos reales, el sidecar debe ser su puerta de enlace, y eso exige una dirección propia en la LAN. Además, la aplicación necesitaba mutar el set de `nftables` del sidecar: exponer un puerto TCP para ello añadía superficie de ataque y un salto de red innecesario, y dar `NET_ADMIN` al contenedor de la aplicación mezclaba planos de datos y de control.
+
+### Decisión
+1. Conectar `tebypass-gateway` a una red **macvlan** sobre la interfaz física del host, con IP configurable (`TEBYPASS_GATEWAY_IP`). La aplicación permanece en la red bridge por defecto.
+2. Comunicar ambos contenedores por un **socket Unix** en el volumen compartido (`/data/gateway.sock`, `0600`) hablado por `gateway/controller.py`.
+3. El daemon valida cada prefijo con `ipaddress` y aplica los cambios como una única transacción `nft -f`, con reemplazo completo como reintento si el set de intervalos rechaza un delta.
+
+### Consecuencias
+- **Positivas**:
+  - El contenedor de la aplicación no necesita privilegios de red ni binario `nft`: el sidecar es el único dueño del plano de datos.
+  - Sin puerto TCP: nada que exponer, nada que autenticar en la red; los permisos del socket hacen el control de acceso.
+  - Un fallo del daemon es visible de inmediato (`status` degradado) y el driver cae a transporte local o emulado en lugar de romper el ciclo de sincronización.
+- **Negativas / Trade-offs**:
+  - Las redes macvlan no permiten que el propio host anfitrión hable con el contenedor; las comprobaciones deben hacerse desde otro equipo de la LAN.
+  - La red macvlan debe crearse una vez en el host antes de levantar el perfil `gateway`.
