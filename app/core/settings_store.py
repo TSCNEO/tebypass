@@ -163,6 +163,8 @@ async def load_into_settings() -> None:
             logger.info("Upgraded legacy plaintext secrets to encrypted at rest in SQLite")
 
     invalidate_driver()
+    log_level = getattr(logging, settings.log_level.upper(), logging.INFO)
+    logging.getLogger("app").setLevel(log_level)
     logger.info("Loaded %d persisted settings from SQLite", applied)
 
 

@@ -1,5 +1,6 @@
 """Main FastAPI application entrypoint."""
 
+import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -37,6 +38,14 @@ engine_instance: ReconciliationEngine | None = None
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application startup and shutdown lifecycle management."""
     global engine_instance
+
+    # 0. Configure logging level
+    log_level = getattr(logging, settings.log_level.upper(), logging.INFO)
+    logging.basicConfig(
+        level=log_level,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
+    logging.getLogger("app").setLevel(log_level)
 
     # 1. Initialize SQLite database and WAL mode (also reloads persisted settings)
     await init_db()
