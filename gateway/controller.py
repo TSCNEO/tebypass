@@ -97,6 +97,22 @@ def normalize_cidr(value: str) -> str:
     return str(network)
 
 
+def canonical_elements(elements: list[str]) -> list[str]:
+    """Normalise nftables output to CIDR form.
+
+    An interval set stores a host address without its ``/32`` suffix, so a target
+    added as ``198.51.100.7/32`` comes back as ``198.51.100.7``. Canonicalising the
+    output keeps the diff against the database stable across sync cycles.
+    """
+    canonical: set[str] = set()
+    for element in elements:
+        try:
+            canonical.add(normalize_cidr(element))
+        except GatewayError:
+            canonical.add(element)
+    return sorted(canonical)
+
+
 def parse_set_elements(payload: str) -> list[str]:
     """Extract the element list from ``nft -j list set`` output."""
     try:
@@ -193,7 +209,7 @@ async def nftables_state() -> dict[str, Any]:
     if not has_set:
         return {"table": True, "set": False, "elements": []}
     try:
-        elements = parse_set_elements(out)
+        elements = canonical_elements(parse_set_elements(out))
     except GatewayError:
         elements = []
     return {"table": True, "set": True, "elements": elements}
@@ -240,7 +256,7 @@ async def handle_status(_message: dict[str, Any]) -> dict[str, Any]:
 
 
 async def handle_list(_message: dict[str, Any]) -> dict[str, Any]:
-    elements = await list_elements()
+    elements = canonical_elements(await list_elements())
     return {"ok": True, "elements": elements, "total": len(elements)}
 
 
@@ -255,7 +271,7 @@ async def handle_sync(message: dict[str, Any]) -> dict[str, Any]:
     requested_adds = set(_string_list(message, "add"))
     requested_removes = set(_string_list(message, "remove"))
 
-    current = set(await list_elements())
+    current = set(canonical_elements(await list_elements()))
     adds = sorted(requested_adds - current)
     removes = sorted(current & requested_removes)
     desired = sorted((current - set(removes)) | set(adds))
@@ -274,7 +290,7 @@ async def handle_sync(message: dict[str, Any]) -> dict[str, Any]:
                 raise delta_error from None
 
     try:
-        total = len(await list_elements())
+        total = len(canonical_elements(await list_elements()))
     except GatewayError:
         total = len(desired)
 

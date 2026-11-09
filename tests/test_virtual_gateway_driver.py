@@ -70,8 +70,16 @@ async def test_get_current_routes_uses_socket(
         "total": 2,
     }
     routes = await driver.get_current_routes()
-    assert routes == {"198.51.100.0/24", "203.0.113.7"}
+    assert routes == {"198.51.100.0/24", "203.0.113.7/32"}
     assert gateway_socket.requests == [{"cmd": "list"}]
+
+
+async def test_host_elements_are_canonicalised(
+    driver: VirtualGatewayDriver, gateway_socket: FakeGateway
+) -> None:
+    """The sidecar reports host addresses without /32; the driver must not churn."""
+    gateway_socket.handler = lambda payload: {"ok": True, "elements": ["198.51.100.7"], "total": 1}
+    assert await driver.get_current_routes() == {"198.51.100.7/32"}
 
 
 async def test_sync_routes_sends_delta_and_honours_response(
@@ -204,6 +212,15 @@ async def test_unreachable_socket_falls_back(
     )
     assert result.success is True
     assert result.added_count == 1
+
+
+def test_canonical_cidr_edge_cases() -> None:
+    from app.drivers.virtual_gateway import canonical_cidr
+
+    assert canonical_cidr("198.51.100.7") == "198.51.100.7/32"
+    assert canonical_cidr("198.51.100.0/24") == "198.51.100.0/24"
+    assert canonical_cidr("  ") == ""
+    assert canonical_cidr("not-an-ip") == "not-an-ip"
 
 
 async def test_close_is_idempotent(driver: VirtualGatewayDriver) -> None:

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import ipaddress
 import json
 import os
 import shutil
@@ -32,6 +33,18 @@ from app.drivers.base import (
 
 DEFAULT_GATEWAY_SOCKET = "/data/gateway.sock"
 SOCKET_TIMEOUT_SECONDS = 5.0
+
+
+def canonical_cidr(element: str) -> str:
+    """Return the CIDR form of a set element (nft drops the /32 of host addresses)."""
+    text = element.strip()
+    if not text:
+        return text
+    candidate = text if "/" in text else f"{text}/32"
+    try:
+        return str(ipaddress.ip_network(candidate, strict=False))
+    except ValueError:
+        return text
 
 
 class VirtualGatewayDriver(BaseRouterDriver):
@@ -118,7 +131,7 @@ class VirtualGatewayDriver(BaseRouterDriver):
         """Query the active elements, preferring the control socket."""
         response = await self._socket_request({"cmd": "list"})
         if response is not None and response.get("ok"):
-            elements = {str(item) for item in response.get("elements", [])}
+            elements = {canonical_cidr(str(item)) for item in response.get("elements", [])}
             self._cached_routes = elements
             return set(elements)
 
@@ -156,7 +169,7 @@ class VirtualGatewayDriver(BaseRouterDriver):
                 continue
             entry = item.get("set")
             if isinstance(entry, dict) and isinstance(entry.get("elem"), list):
-                elements.update(str(element) for element in entry["elem"])
+                elements.update(canonical_cidr(str(element)) for element in entry["elem"])
         return elements
 
     async def sync_routes(
@@ -178,7 +191,7 @@ class VirtualGatewayDriver(BaseRouterDriver):
                 return self._failure(start, str(response.get("error") or "gateway sync failed"))
             returned = response.get("elements")
             if isinstance(returned, list):
-                self._cached_routes = {str(item) for item in returned}
+                self._cached_routes = {canonical_cidr(str(item)) for item in returned}
             else:
                 self._cached_routes = (self._cached_routes - set(remove_cidrs)) | set(add_cidrs)
             self._last_sync = datetime.now(UTC)
@@ -290,7 +303,7 @@ class VirtualGatewayDriver(BaseRouterDriver):
         nftables = response.get("nftables") or {}
         elements = response.get("elements")
         if isinstance(elements, list):
-            self._cached_routes = {str(item) for item in elements}
+            self._cached_routes = {canonical_cidr(str(item)) for item in elements}
 
         socket_ok = bool(response.get("ok"))
         set_ok = bool(nftables.get("set"))

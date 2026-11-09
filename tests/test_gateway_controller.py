@@ -127,6 +127,27 @@ def test_parse_set_elements_rejects_garbage() -> None:
         controller.parse_set_elements("{not json")
 
 
+def test_canonical_elements_restores_the_prefix() -> None:
+    assert controller.canonical_elements(["203.0.113.7", "198.51.100.0/24"]) == [
+        "198.51.100.0/24",
+        "203.0.113.7/32",
+    ]
+
+
+async def test_host_addresses_are_stable_across_syncs(nft_state: set[str]) -> None:
+    """nft drops the /32 of host elements; the diff must not churn because of it."""
+    nft_state.clear()
+    nft_state.add("203.0.113.7")
+
+    listing = await controller.dispatch({"cmd": "list"})
+    assert listing["elements"] == ["203.0.113.7/32"]
+
+    synced = await controller.dispatch({"cmd": "sync", "add": ["203.0.113.7/32"], "remove": []})
+    assert synced["ok"] is True
+    assert synced["added_count"] == 0
+    assert synced["total_active"] == 1
+
+
 def test_scripts_use_the_expected_syntax() -> None:
     delta = controller.build_delta_script(["198.51.100.0/24"], ["203.0.113.0/24"])
     assert delta == (
