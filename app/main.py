@@ -61,7 +61,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # 4. Instantiate and start core reconciliation engine
     engine_instance = ReconciliationEngine(
-        driver=driver,
+        driver=None,
         cache=cache,
         resolver=resolver,
         sync_interval_seconds=settings.sync_interval_seconds,

@@ -817,8 +817,8 @@ function tebypass() {
       this.busy.settings = true;
       try {
         this.settings = await this.api('PUT', '/api/v1/settings', this.settings);
-        this.toast('Ajustes guardados');
-        await this.loadStatus();
+        this.toast('Ajustes guardados. Sincronizando rutas...');
+        await this.syncNow();
       } catch (e) { this.fail(e); }
       this.busy.settings = false;
     },
@@ -829,6 +829,9 @@ function tebypass() {
       try {
         await this.api('PUT', '/api/v1/settings', this.settings);
         this.routerTest = await this.api('POST', '/api/v1/settings/test-router', {});
+        if (this.routerTest && this.routerTest.healthy) {
+          await this.syncNow();
+        }
       } catch (e) { this.fail(e); }
       this.busy.test = false;
     },

@@ -1,5 +1,6 @@
 """Runtime settings and router driver diagnostics endpoints."""
 
+import asyncio
 import logging
 from typing import Any
 
@@ -16,6 +17,20 @@ logger = logging.getLogger("tebypass.api.settings")
 router = APIRouter(prefix="/api/v1", tags=["Settings"])
 
 
+async def _trigger_reconciliation_safely() -> None:
+    try:
+        from app.core.cache import SlidingWindowCache
+        from app.core.engine import ReconciliationEngine
+        from app.core.resolver import NativeDNSResolver
+
+        cache = SlidingWindowCache(default_window_seconds=settings.sliding_window_seconds)
+        resolver = NativeDNSResolver(cache=cache)
+        engine = ReconciliationEngine(driver=None, cache=cache, resolver=resolver)
+        await engine.reconcile(force=True)
+    except Exception as ex:
+        logger.warning("Auto-sync after settings update failed: %s", ex)
+
+
 @router.get("/settings")
 async def read_settings() -> dict[str, Any]:
     """Return every editable setting with secret values masked."""
@@ -27,6 +42,7 @@ async def update_settings(payload: dict[str, Any]) -> dict[str, Any]:
     """Persist a batch of settings in SQLite and hot-apply them."""
     try:
         await save_settings(payload)
+        asyncio.create_task(_trigger_reconciliation_safely())
     except ValueError as ex:
         raise HTTPException(status_code=400, detail=str(ex)) from ex
     return masked_dump()

@@ -25,14 +25,14 @@ class ReconciliationEngine:
 
     def __init__(
         self,
-        driver: BaseRouterDriver | None,
-        cache: SlidingWindowCache,
-        resolver: NativeDNSResolver,
+        driver: BaseRouterDriver | None = None,
+        cache: SlidingWindowCache | None = None,
+        resolver: NativeDNSResolver | None = None,
         sync_interval_seconds: int = 300,
     ) -> None:
-        self._driver = driver
-        self.cache = cache
-        self.resolver = resolver
+        self._explicit_driver = driver
+        self.cache = cache or SlidingWindowCache()
+        self.resolver = resolver or NativeDNSResolver(cache=self.cache)
         self.sync_interval = sync_interval_seconds
         self._background_task: asyncio.Task[None] | None = None
         self._stop_event = asyncio.Event()
@@ -41,13 +41,13 @@ class ReconciliationEngine:
     @property
     def driver(self) -> BaseRouterDriver:
         """Return the live driver, picking up hot configuration changes."""
-        if self._driver is None:
-            self._driver = get_driver()
-        return self._driver
+        if self._explicit_driver is not None:
+            return self._explicit_driver
+        return get_driver()
 
     @driver.setter
-    def driver(self, value: BaseRouterDriver) -> None:
-        self._driver = value
+    def driver(self, value: BaseRouterDriver | None) -> None:
+        self._explicit_driver = value
 
     async def reconcile(self, force: bool = False) -> SyncResult:
         """Execute a complete reconciliation cycle: refresh feeds, resolve, diff and dispatch."""
