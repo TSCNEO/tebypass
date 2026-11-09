@@ -27,7 +27,16 @@ fi
 if [ -n "$WG_CONF" ]; then
     echo "[TeByPass Gateway] Starting WireGuard tunnel from $WG_CONF ..."
     install -d -m 700 /etc/wireguard
-    [ "$WG_CONF" != "/etc/wireguard/wg0.conf" ] && cp "$WG_CONF" /etc/wireguard/wg0.conf && chmod 600 /etc/wireguard/wg0.conf
+    cp "$WG_CONF" /etc/wireguard/wg0.conf
+    # Enforce split-routing: ensure Table = off so wg-quick doesn't alter default route
+    # or set sysctl src_valid_mark (which fails on unprivileged container runtimes)
+    if ! grep -q 'Table' /etc/wireguard/wg0.conf; then
+        sed -i '/\[Interface\]/a Table = off' /etc/wireguard/wg0.conf
+    fi
+    # Strip DNS to avoid resolvconf failures inside container
+    sed -i '/^[[:space:]]*DNS[[:space:]]*=/d' /etc/wireguard/wg0.conf
+    chmod 600 /etc/wireguard/wg0.conf
+
     wg-quick up wg0 || true
 
     # Configure policy routing table 100 for marked packets
