@@ -25,18 +25,25 @@ async def test_closed_schedule_keeps_manual_targets(db_ready: None) -> None:
             blocked=True,
             last_fetched_at=datetime.now(UTC),
         )
-        session.add(feed)
+        generic = Feed(
+            name="Static",
+            url="https://feed.example.net/static",
+            format="plaintext",
+            last_fetched_at=datetime.now(UTC),
+        )
+        session.add_all([feed, generic])
         await session.flush()
         session.add_all(
             [
                 Target(value="198.51.100.7/32", destination_type="cidr", feed_id=feed.id),
                 Target(value="203.0.113.7/32", destination_type="cidr"),
+                Target(value="192.0.2.7/32", destination_type="cidr", feed_id=generic.id),
             ]
         )
         await session.commit()
     driver = MockRouterDriver()
     assert (await ReconciliationEngine(driver=driver).reconcile()).success
-    assert await driver.get_current_routes() == {"203.0.113.7/32"}
+    assert await driver.get_current_routes() == {"203.0.113.7/32", "192.0.2.7/32"}
 
 
 async def test_webhook_only_sends_transitions(db_ready: None) -> None:

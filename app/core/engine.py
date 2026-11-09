@@ -7,7 +7,7 @@ import logging
 import time
 from datetime import UTC, datetime
 
-from sqlalchemy import delete, or_, select
+from sqlalchemy import and_, delete, or_, select
 
 from app.core.cache import SlidingWindowCache
 from app.core.config import settings
@@ -128,7 +128,12 @@ class ReconciliationEngine:
                 )
             )
             if not community_schedule().is_active():
-                query = query.where(Target.feed_id.is_(None))
+                query = query.where(
+                    or_(
+                        Target.feed_id.is_(None),
+                        and_(Feed.blocked.is_(None), Feed.format.not_in(["hayahora", "stopliga"])),
+                    )
+                )
             rows = await session.execute(query)
             targets = rows.scalars().all()
 
