@@ -119,6 +119,6 @@ en el kernel de macOS/Windows.
 
 ## Créditos y licencia
 
-Inspirado en el trabajo de **jcastro / stopliga** y la comunidad **HayAHora**.
+Gracias a [jcastro/stopliga](https://github.com/jcastro/stopliga) por la idea y a la comunidad **HayAHora** por mantener las listas abiertas.
 [Dependencias y atribuciones](THIRD_PARTY_NOTICES.md). TeByPass: AGPL-3.0-or-later.
 El uso debe respetar la legislación y las condiciones de los servicios de red aplicables.
