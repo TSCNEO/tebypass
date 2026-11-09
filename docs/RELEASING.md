@@ -4,6 +4,14 @@ El MVP es candidato a una primera release **0.2.0**, con alcance y límites indi
 README/PROJECT. No se anuncia certificación de todos los routers ni compatibilidad IPv6
 del gateway. Este procedimiento no convierte automáticamente un repositorio privado en público.
 
+## Validación privada actual
+
+Candidata `v0.2.0-rc.3` preparada en borrador pre-release. Main y candidata pasaron el
+flujo completo, incluidas imágenes descargadas de GHCR, persistencia, pruebas de kernel
+y checksums de assets descargados. Evidencia en [PHASES.md](PHASES.md#distribución-de-imágenes-y-candidata-de-primera-release).
+Todavía no hay release pública ni latest estable. Falta abrir código y ambos paquetes,
+comprobar pull sin credenciales y publicar la entrega elegida.
+
 ## Qué hace GitHub
 
 `Container images` se ejecuta al cambiar main, recibir un tag `v*` o solicitar ejecución

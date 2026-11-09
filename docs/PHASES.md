@@ -103,3 +103,33 @@ HTTP interno confirmado: login 200 con cookie Secure y guardado 200. Origen ajen
 Origin ausente reciben 403. La prueba inicial asumía un backend que ya no estaba
 seleccionado; la comprobación posterior observó UniFi saludable sin modificar su selección.
 No se recreó el gateway ni se modificaron credenciales o parámetros de routing.
+
+## Distribución de imágenes y candidata de primera release
+
+Se separó el Compose de instalación (solo imágenes) del override de desarrollo. GitHub
+construye app y gateway para amd64/arm64 después de CI, publica referencias únicas por
+ejecución y las instala desde GHCR antes de promover canales/versiones. Se comprobó
+persistencia tras recreación, autenticación, guardado, origen ajeno, revisión/versión y
+las pruebas Linux de nftables, WireGuard, DNS/HTTP y reenvío fail-closed. La ejecución es
+amd64; arm64 tiene compilación multiplataforma, no acreditación en hardware.
+
+El flujo completo de main y el de `v0.2.0-rc.3` terminaron correctamente sobre `233a2fc`:
+[main](https://github.com/TSCNEO/tebypass/actions/runs/42704168067),
+[candidata](https://github.com/TSCNEO/tebypass/actions/runs/42704173098).
+**120 tests**, Ruff, formato, Mypy y actionlint sin errores. La candidata creó borrador
+pre-release con Compose fijado, env.example, instrucciones, licencias y SHA256SUMS;
+los assets descargados se verificaron tanto en Actions como desde el checkout local.
+
+La validación detectó y corrigió colisiones de etiquetas entre main/tag del mismo SHA
+y el renombrado de archivos con punto inicial por GitHub. Las candidatas previas no se
+publicaron; el borrador reemplazado se retiró conservando tags/historial. No se generó
+latest estable. Código y paquetes permanecieron privados durante las pruebas.
+
+Se corrigieron ejemplos antiguos a rangos RFC, se excluyeron secretos locales del contexto
+Docker y Gitleaks 8.30.1 recorrió todo el historial sin hallazgos. La fuente actual no
+contiene literales RFC1918. Ambas atribuciones enlazan sus proyectos y están verificadas
+en el panel desplegado, cuyo driver permaneció saludable.
+
+La instalación abierta queda pendiente de hacer público el código y ambos paquetes GHCR,
+comprobar pull anónimo y publicar la entrega elegida. No basta cambiar solo la visibilidad
+del repositorio. No se publicó ninguna release ni se cambió visibilidad en esta fase.
