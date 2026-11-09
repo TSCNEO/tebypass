@@ -154,6 +154,7 @@ class UniFiRouterDriver(BaseRouterDriver):
             current - desired,
             force=True,
             desired_cidrs=desired,
+            policy_enabled=enabled,
         )
         if result.success and await self.get_current_routes(force=True) != desired:
             raise RuntimeError("UniFi did not retain the requested policy")
@@ -165,6 +166,7 @@ class UniFiRouterDriver(BaseRouterDriver):
         to_remove: set[str],
         force: bool = False,
         desired_cidrs: set[str] | None = None,
+        policy_enabled: bool | None = None,
     ) -> SyncResult:
         """Create or update the V2 Traffic Route on UniFi."""
         start = time.perf_counter()
@@ -229,7 +231,14 @@ class UniFiRouterDriver(BaseRouterDriver):
                 if desired_cidrs is not None
                 else (current_ips | {item.cidr for item in to_add}) - to_remove
             )
-            desired_list = sorted(desired_set)
+            requested_enabled = (
+                bool(desired_set)
+                if policy_enabled is None
+                else bool(policy_enabled and desired_set)
+            )
+            # UniFi rejects an empty IP match even when disabling a policy. Keep its last
+            # members as configuration while reporting no effective active routes.
+            desired_list = sorted(desired_set if requested_enabled else current_ips)
 
             ip_entries: list[dict[str, Any]] = [
                 {
@@ -265,7 +274,7 @@ class UniFiRouterDriver(BaseRouterDriver):
                 payload["matching_target"] = "IP"
                 payload["network_id"] = vpn_id
                 payload["ip_addresses"] = ip_entries
-                payload["enabled"] = bool(desired_list)
+                payload["enabled"] = requested_enabled
                 put_url = f"{routes_url}/{route_id}"
                 update_resp = await client.put(put_url, json=payload)
                 if update_resp.status_code not in (200, 201):
@@ -276,7 +285,7 @@ class UniFiRouterDriver(BaseRouterDriver):
                 create_payload = {
                     "description": self.route_name,
                     "domains": [],
-                    "enabled": bool(desired_list),
+                    "enabled": requested_enabled,
                     "ip_addresses": ip_entries,
                     "ip_ranges": [],
                     "kill_switch_enabled": False,
@@ -311,7 +320,7 @@ class UniFiRouterDriver(BaseRouterDriver):
                 if isinstance(entry, dict)
             }
             if (
-                matched.get("enabled") != bool(desired_list)
+                matched.get("enabled") != requested_enabled
                 or verified_ips != set(desired_list)
                 or matched.get("network_id") != vpn_id
             ):
@@ -327,7 +336,7 @@ class UniFiRouterDriver(BaseRouterDriver):
                     "UniFi post-write verification failed; previous policy restoration requested"
                 )
 
-            self._active_routes = set(desired_list)
+            self._active_routes = set(desired_list) if requested_enabled else set()
             self._routes_loaded = True
             self._last_sync = datetime.now(UTC)
             duration_ms = (time.perf_counter() - start) * 1000.0

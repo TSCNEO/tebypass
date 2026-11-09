@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="dark">
-  <title>TeByPass // Panel de control</title>
+  <link rel="icon" href="/static/favicon.svg"><title>TeByPass // Panel de control</title>
   <link rel="stylesheet" href="/static/app.css">
   <script defer src="/static/vendor/alpine.min.js"></script>
   <style>
@@ -117,7 +117,7 @@
           <button class="switch big mt-1" :class="feed && feed.enabled ? 'on' : ''" @click="toggleFeed()" :disabled="!feed || busy.feed"></button>
           <div>
             <div class="flex items-center gap-2 flex-wrap">
-              <h2 class="text-base font-semibold text-slate-100">Bloqueo de LaLiga (lista comunitaria)</h2>
+              <h2 class="text-base font-semibold text-slate-100">Lista comunitaria de bloqueos</h2>
               <span class="mono text-[10px] px-2 py-0.5 rounded border"
                     :class="feed && feed.enabled ? 'text-emerald-400 border-emerald-700/50' : 'text-slate-500 border-slate-700'"
                     x-text="feed && feed.enabled ? 'ACTIVADA' : 'DESACTIVADA'"></span>

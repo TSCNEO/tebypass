@@ -72,3 +72,5 @@ Thumbs.db
 data/
 output/
 node_modules/
+
+.playwright-cli/

@@ -232,4 +232,7 @@ async def test_disabled_policy_with_retained_members_stays_disabled() -> None:
     result = await driver.apply_policy(set(), False)
     assert result.success
     assert route["enabled"] is False
+    assert route["ip_addresses"] == [
+        {"ip_or_subnet": "198.51.100.7/32", "ip_version": "v4", "ports": [], "port_ranges": []}
+    ]
     assert await driver.get_current_routes(force=True) == set()
