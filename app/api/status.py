@@ -30,7 +30,7 @@ async def healthz() -> dict[str, str]:
 async def get_system_status(db: AsyncSession = Depends(get_db)) -> SystemStatusResponse:
     """Detailed telemetry and router driver health status."""
     driver = get_driver()
-    driver_status = await driver.health_check()
+    driver_status = driver.get_status()
 
     # Query counts from SQLite WAL
     targets_count_res = await db.execute(select(func.count(Target.id)))

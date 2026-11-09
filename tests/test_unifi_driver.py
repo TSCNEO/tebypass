@@ -155,3 +155,51 @@ async def test_unifi_teardown_and_purge_endpoint(client: httpx.AsyncClient) -> N
         assert resp.status_code == 200
         data = resp.json()
         assert data["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_unifi_driver_avoids_unnecessary_network_polling() -> None:
+    """Verify that get_status uses memory and get_current_routes caches without polling."""
+    network_calls = 0
+
+    def mock_handler(request: httpx.Request) -> httpx.Response:
+        nonlocal network_calls
+        network_calls += 1
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "_id": "r-1",
+                    "description": "TeByPass",
+                    "ip_addresses": [{"ip_or_subnet": "203.0.113.50/32"}],
+                }
+            ],
+        )
+
+    transport = httpx.MockTransport(mock_handler)
+    driver = UniFiRouterDriver()
+    driver.controller_url = "https://unifi.example.local"
+    driver.api_key = "test-key"
+    driver._client = lambda: httpx.AsyncClient(transport=transport)  # type: ignore[method-assign]
+
+    # 1. get_status should NOT make any network call
+    status = driver.get_status()
+    assert status.driver_name == "unifi"
+    assert status.health.value == "healthy"
+    assert network_calls == 0
+
+    # 2. First get_current_routes loads from network (discover prefix + trafficroutes)
+    routes = await driver.get_current_routes(force=False)
+    assert routes == {"203.0.113.50/32"}
+    assert network_calls == 2
+
+    # 3. Subsequent get_current_routes uses memory (0 new network calls)
+    routes2 = await driver.get_current_routes(force=False)
+    assert routes2 == {"203.0.113.50/32"}
+    assert network_calls == 2
+
+    # 4. sync_routes with no changes does NOT make any network call
+    res = await driver.sync_routes(to_add=set(), to_remove=set(), force=False)
+    assert res.success is True
+    assert res.added_count == 0
+    assert network_calls == 2  # Still 2! No new calls!

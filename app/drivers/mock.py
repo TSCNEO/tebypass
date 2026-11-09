@@ -29,7 +29,7 @@ class MockRouterDriver(BaseRouterDriver):
         self._routes.clear()
         self._is_healthy = True
 
-    async def get_current_routes(self) -> set[str]:
+    async def get_current_routes(self, force: bool = False) -> set[str]:
         """Return the set of active CIDRs currently held in memory."""
         return set(self._routes.keys())
 

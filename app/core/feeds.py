@@ -134,8 +134,9 @@ class FeedManager:
     def parse_hayahora(
         self,
         payload: Any,
-        force_active: bool = True,
+        force_active: bool = False,
         isp_filter: str = "",
+        max_targets: int = 200,
     ) -> list[ParsedTarget]:
         """Parse the ``{"lastUpdate": ..., "data": [...]}`` HayAHora document."""
         if not isinstance(payload, dict):
@@ -155,6 +156,12 @@ class FeedManager:
                 continue
             seen.add(target.value)
             targets.append(target)
+            if len(targets) >= max_targets:
+                logger.warning(
+                    "Feed safety ceiling (%d targets) reached; truncating import to prevent router saturation",
+                    max_targets,
+                )
+                break
 
         return targets
 

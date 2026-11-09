@@ -130,6 +130,12 @@
             <span x-show="!busy.feed">Actualizar lista</span>
             <span x-show="busy.feed">Descargando…</span>
           </button>
+          <button class="btn btn-ghost px-3 py-2 rounded-md text-xs mono uppercase tracking-wider text-rose-400 hover:text-rose-300"
+                  @click="clearFeed()"
+                  :disabled="!feed || busy.feed"
+                  x-show="feed && feed.targets_count > 0">
+            <span>Vaciar</span>
+          </button>
         </div>
       </div>
       <div class="px-5 py-3 text-[12px] text-slate-500 flex items-start gap-2">
@@ -674,9 +680,6 @@ function tebypass() {
       try {
         this.settings = await this.api('GET', '/api/v1/settings');
         if (this.settings.feed_force_active === undefined) this.settings.feed_force_active = false;
-        if (this.settings.router_driver === 'unifi') {
-          this.loadUnifiVpns();
-        }
       } catch (e) { this.fail(e); }
     },
 
@@ -715,6 +718,18 @@ function tebypass() {
         const r = await this.api('POST', '/api/v1/feeds/' + this.feed.id + '/fetch');
         this.toast('Lista actualizada: ' + (r.imported || 0) + ' destinos');
         await Promise.all([this.loadFeeds(), this.loadTargets()]);
+      } catch (e) { this.fail(e); }
+      this.busy.feed = false;
+    },
+
+    async clearFeed() {
+      if (!this.feed || this.busy.feed) return;
+      if (!confirm('¿Vaciar todas las IPs importadas de esta lista comunitaria?')) return;
+      this.busy.feed = true;
+      try {
+        const r = await this.api('POST', '/api/v1/feeds/' + this.feed.id + '/clear', {});
+        this.toast(`Lista vaciada (${r.deleted} IPs eliminadas)`);
+        await Promise.all([this.loadFeeds(), this.loadTargets(), this.loadStatus()]);
       } catch (e) { this.fail(e); }
       this.busy.feed = false;
     },

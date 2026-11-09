@@ -20,7 +20,7 @@ logger = logging.getLogger("tebypass.feeds_sync")
 USER_AGENT = "TeByPass/0.1.0 (+https://github.com/TSCNEO/tebypass)"
 
 
-async def refresh_feed(session: AsyncSession, feed: Feed) -> int:
+async def refresh_feed(session: AsyncSession, feed: Feed, force: bool = False) -> int:
     """Download a single feed and replace its targets. Returns the imported count.
 
     A failed download never wipes the previously imported targets: stale routes are far
@@ -30,7 +30,7 @@ async def refresh_feed(session: AsyncSession, feed: Feed) -> int:
     manager = FeedManager()
 
     headers = {"User-Agent": USER_AGENT}
-    if feed.etag:
+    if feed.etag and not force:
         headers["If-None-Match"] = feed.etag
 
     try:
@@ -94,9 +94,13 @@ async def refresh_feed_by_id(session: AsyncSession, feed_id: str) -> int:
     return await refresh_feed(session, feed)
 
 
-async def refresh_due_feeds(session: AsyncSession, interval_seconds: int) -> int:
+async def refresh_due_feeds(
+    session: AsyncSession,
+    interval_seconds: int,
+    force: bool = False,
+) -> int:
     """Refresh every enabled feed whose last successful fetch is older than the interval."""
-    if interval_seconds <= 0:
+    if interval_seconds <= 0 and not force:
         return 0
 
     cutoff = datetime.now(UTC) - timedelta(seconds=interval_seconds)
@@ -107,8 +111,8 @@ async def refresh_due_feeds(session: AsyncSession, interval_seconds: int) -> int
         last = feed.last_fetched_at
         if last is not None and last.tzinfo is None:
             last = last.replace(tzinfo=UTC)
-        if last is not None and last > cutoff:
+        if not force and last is not None and last > cutoff:
             continue
-        await refresh_feed(session, feed)
+        await refresh_feed(session, feed, force=force)
         refreshed += 1
     return refreshed

@@ -73,7 +73,11 @@ class ReconciliationEngine:
             # 0. Refresh any remote feed that is due (respecting its enabled toggle)
             async with AsyncSessionLocal() as feed_session:
                 try:
-                    await refresh_due_feeds(feed_session, settings.sync_interval_seconds)
+                    await refresh_due_feeds(
+                        feed_session,
+                        settings.sync_interval_seconds,
+                        force=force,
+                    )
                 except Exception as ex:  # noqa: BLE001 - never abort a sync because of a feed
                     logger.warning("Feed refresh failed: %s", ex)
 
@@ -139,8 +143,8 @@ class ReconciliationEngine:
                 await self.cache.purge_expired(now)
                 await session.commit()
 
-            # 2. Query router driver for current routes
-            current_routes = await self.driver.get_current_routes()
+            # 2. Query router driver for current routes (cached in memory unless force=True)
+            current_routes = await self.driver.get_current_routes(force=force)
 
             # 3. Compute differences
             desired_cidrs = set(desired_targets.keys())
@@ -156,6 +160,20 @@ class ReconciliationEngine:
                 len(desired_cidrs),
                 len(current_routes),
             )
+
+            if not to_add_objects and not cidrs_to_remove and not force:
+                logger.debug(
+                    "No route changes needed (%d routes active); skipping router sync.",
+                    len(current_routes),
+                )
+                return SyncResult(
+                    driver_name=self.driver.driver_name,
+                    added_count=0,
+                    removed_count=0,
+                    total_active=len(current_routes),
+                    duration_ms=round((time.perf_counter() - start_time) * 1000.0, 2),
+                    success=True,
+                )
 
             # 4. Apply changes via driver
             sync_res = await self.driver.sync_routes(

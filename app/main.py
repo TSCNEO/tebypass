@@ -78,6 +78,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await driver.close()
 
 
+async def trigger_reconciliation(force: bool = True) -> None:
+    """Safely invoke a reconciliation cycle on the live engine."""
+    global engine_instance
+    if engine_instance is not None:
+        await engine_instance.reconcile(force=force)
+    else:
+        cache = SlidingWindowCache(default_window_seconds=settings.sliding_window_seconds)
+        resolver = NativeDNSResolver(cache=cache)
+        engine = ReconciliationEngine(driver=None, cache=cache, resolver=resolver)
+        await engine.reconcile(force=force)
+
+
 app = FastAPI(
     title="TeByPass",
     version=get_version_string(),

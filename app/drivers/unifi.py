@@ -39,6 +39,9 @@ class UniFiRouterDriver(BaseRouterDriver):
         self._prefix: str | None = None
         self._last_sync: datetime | None = None
         self._active_routes: set[str] = set()
+        self._routes_loaded: bool = False
+        self._last_health_check: datetime | None = None
+        self._cached_health_status: DriverStatus | None = None
 
     def _get_headers(self) -> dict[str, str]:
         headers = {"Accept": "application/json"}
@@ -105,9 +108,12 @@ class UniFiRouterDriver(BaseRouterDriver):
                     )
             return sorted(results, key=lambda x: x["name"].lower())
 
-    async def get_current_routes(self) -> set[str]:
+    async def get_current_routes(self, force: bool = False) -> set[str]:
         """Fetch current IP members of the TeByPass traffic route."""
         if not self.controller_url or not self.api_key:
+            return set(self._active_routes)
+
+        if self._routes_loaded and not force:
             return set(self._active_routes)
 
         async with self._client() as client:
@@ -128,7 +134,9 @@ class UniFiRouterDriver(BaseRouterDriver):
                             if isinstance(entry, dict) and entry.get("ip_or_subnet")
                         }
                         self._active_routes = {str(ip) for ip in ips if ip}
+                        self._routes_loaded = True
                         return set(self._active_routes)
+                self._routes_loaded = True
             except Exception as ex:
                 logger.warning("Failed to query UniFi traffic routes: %s", ex)
         return set(self._active_routes)
@@ -137,6 +145,7 @@ class UniFiRouterDriver(BaseRouterDriver):
         self,
         to_add: set[TargetCIDR],
         to_remove: set[str],
+        force: bool = False,
     ) -> SyncResult:
         """Create or update the V2 Traffic Route on UniFi."""
         start = time.perf_counter()
@@ -146,11 +155,23 @@ class UniFiRouterDriver(BaseRouterDriver):
                 self._active_routes.add(item.cidr)
             for cidr in to_remove:
                 self._active_routes.discard(cidr)
+            self._routes_loaded = True
             self._last_sync = datetime.now(UTC)
             return SyncResult(
                 driver_name=self.driver_name,
                 added_count=len(to_add),
                 removed_count=len(to_remove),
+                total_active=len(self._active_routes),
+                duration_ms=round((time.perf_counter() - start) * 1000.0, 2),
+                success=True,
+            )
+
+        if not to_add and not to_remove and not force and self._routes_loaded:
+            logger.debug("No route changes needed on UniFi; skipping remote call.")
+            return SyncResult(
+                driver_name=self.driver_name,
+                added_count=0,
+                removed_count=0,
                 total_active=len(self._active_routes),
                 duration_ms=round((time.perf_counter() - start) * 1000.0, 2),
                 success=True,
@@ -243,6 +264,7 @@ class UniFiRouterDriver(BaseRouterDriver):
                     )
 
             self._active_routes = set(desired_list)
+            self._routes_loaded = True
             self._last_sync = datetime.now(UTC)
             duration_ms = (time.perf_counter() - start) * 1000.0
 
@@ -255,8 +277,26 @@ class UniFiRouterDriver(BaseRouterDriver):
                 success=True,
             )
 
+    def get_status(self) -> DriverStatus:
+        """Return current in-memory status without querying UniFi over the network."""
+        is_configured = bool(self.controller_url and self.api_key)
+        health = DriverHealth.HEALTHY if is_configured else DriverHealth.DEGRADED
+        return DriverStatus(
+            driver_name=self.driver_name,
+            health=health,
+            active_routes_count=len(self._active_routes),
+            last_sync=self._last_sync,
+            details={
+                "controller_url": self.controller_url or "not_configured",
+                "site": self.site,
+                "route_name": self.route_name,
+                "vpn_network_id": self.vpn_network_id,
+                "configured": is_configured,
+            },
+        )
+
     async def health_check(self) -> DriverStatus:
-        """Inspect UniFi controller connectivity and VPN interfaces."""
+        """Inspect UniFi controller connectivity and VPN interfaces on demand."""
         is_configured = bool(self.controller_url and self.api_key)
         vpn_list: list[dict[str, Any]] = []
         route_found = False
@@ -265,7 +305,7 @@ class UniFiRouterDriver(BaseRouterDriver):
         if is_configured:
             try:
                 vpn_list = await self.get_vpn_networks()
-                curr_routes = await self.get_current_routes()
+                curr_routes = await self.get_current_routes(force=True)
                 route_found = bool(curr_routes)
                 health = DriverHealth.HEALTHY if vpn_list else DriverHealth.DEGRADED
             except Exception as ex:
@@ -282,13 +322,16 @@ class UniFiRouterDriver(BaseRouterDriver):
             "configured": is_configured,
         }
 
-        return DriverStatus(
+        status = DriverStatus(
             driver_name=self.driver_name,
             health=health,
             active_routes_count=len(self._active_routes),
             last_sync=self._last_sync,
             details=details,
         )
+        self._last_health_check = datetime.now(UTC)
+        self._cached_health_status = status
+        return status
 
     async def close(self) -> None:
         """Release HTTP client sessions."""
@@ -329,4 +372,5 @@ class UniFiRouterDriver(BaseRouterDriver):
                 logger.warning("Error deleting UniFi traffic route: %s", ex)
 
         self._active_routes.clear()
+        self._routes_loaded = False
         self._last_sync = datetime.now(UTC)

@@ -1,18 +1,19 @@
 """Remote feeds management endpoints."""
 
-from datetime import UTC, datetime
+import asyncio
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.feeds import FeedManager
 from app.db.models import Feed, Target
 from app.db.session import get_db
 from app.models.schemas import FeedCreate, FeedResponse
 
 router = APIRouter(prefix="/api/v1/feeds", tags=["Feeds"])
+logger = logging.getLogger("tebypass.api.feeds")
 
 
 def _to_response(feed: Feed) -> FeedResponse:
@@ -87,6 +88,14 @@ async def toggle_feed(
     feed = await _load_feed(db, feed_id)
     feed.enabled = not feed.enabled
     await db.commit()
+
+    try:
+        from app.main import trigger_reconciliation
+
+        asyncio.create_task(trigger_reconciliation(force=True))
+    except Exception as ex:
+        logger.warning("Trigger reconciliation after feed toggle failed: %s", ex)
+
     return _to_response(await _load_feed(db, feed_id))
 
 
@@ -97,38 +106,41 @@ async def fetch_feed_now(
 ) -> dict[str, int]:
     """Force download and synchronization of a specific remote feed."""
     feed = await _load_feed(db, feed_id)
+    from app.core.feeds_sync import refresh_feed
 
-    manager = FeedManager()
-    parsed_targets, new_etag, modified = await manager.fetch_feed(
-        url=feed.url,
-        feed_format=feed.format,
-        etag=feed.etag,
-    )
+    imported = await refresh_feed(db, feed, force=True)
 
-    if not modified:
-        return {"imported": 0, "status": 304}
+    try:
+        from app.main import trigger_reconciliation
 
-    feed.last_fetched_at = datetime.now(UTC)
-    if new_etag:
-        feed.etag = new_etag
+        asyncio.create_task(trigger_reconciliation(force=True))
+    except Exception as ex:
+        logger.warning("Trigger reconciliation after feed fetch failed: %s", ex)
 
-    # Delete previous targets from this feed to avoid stale entries
+    return {"imported": imported}
+
+
+@router.post("/{feed_id}/clear", response_model=dict[str, int])
+async def clear_feed_targets(
+    feed_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+    """Wipe all targets imported from a feed."""
+    feed = await _load_feed(db, feed_id)
     del_query = select(Target).where(Target.feed_id == feed.id)
-    old_targets = (await db.execute(del_query)).scalars().all()
-    for old_target in old_targets:
-        await db.delete(old_target)
-
-    count = 0
-    for parsed in parsed_targets:
-        target = Target(
-            feed_id=feed.id,
-            value=parsed.value,
-            destination_type=parsed.destination_type,
-            description=parsed.description or f"Imported from {feed.name}",
-            enabled=True,
-        )
-        db.add(target)
-        count += 1
-
+    targets = (await db.execute(del_query)).scalars().all()
+    count = len(targets)
+    for t in targets:
+        await db.delete(t)
+    feed.etag = None
+    feed.last_fetched_at = None
     await db.commit()
-    return {"imported": count}
+
+    try:
+        from app.main import trigger_reconciliation
+
+        asyncio.create_task(trigger_reconciliation(force=True))
+    except Exception as ex:
+        logger.warning("Trigger reconciliation after feed clear failed: %s", ex)
+
+    return {"deleted": count}

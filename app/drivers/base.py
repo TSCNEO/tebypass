@@ -60,7 +60,7 @@ class BaseRouterDriver(ABC):
         pass
 
     @abstractmethod
-    async def get_current_routes(self) -> set[str]:
+    async def get_current_routes(self, force: bool = False) -> set[str]:
         """Query and return the set of currently configured route CIDRs."""
         pass
 
@@ -77,6 +77,16 @@ class BaseRouterDriver(ABC):
     async def health_check(self) -> DriverStatus:
         """Perform a connectivity check and return operational status."""
         pass
+
+    def get_status(self) -> DriverStatus:
+        """Return operational telemetry from memory without executing remote I/O."""
+        return DriverStatus(
+            driver_name=self.driver_name,
+            health=DriverHealth.HEALTHY,
+            active_routes_count=0,
+            last_sync=None,
+            details={},
+        )
 
     @abstractmethod
     async def close(self) -> None:

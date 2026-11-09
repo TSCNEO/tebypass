@@ -19,14 +19,9 @@ router = APIRouter(prefix="/api/v1", tags=["Settings"])
 
 async def _trigger_reconciliation_safely() -> None:
     try:
-        from app.core.cache import SlidingWindowCache
-        from app.core.engine import ReconciliationEngine
-        from app.core.resolver import NativeDNSResolver
+        from app.main import trigger_reconciliation
 
-        cache = SlidingWindowCache(default_window_seconds=settings.sliding_window_seconds)
-        resolver = NativeDNSResolver(cache=cache)
-        engine = ReconciliationEngine(driver=None, cache=cache, resolver=resolver)
-        await engine.reconcile(force=True)
+        await trigger_reconciliation(force=True)
     except Exception as ex:
         logger.warning("Auto-sync after settings update failed: %s", ex)
 

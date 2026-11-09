@@ -31,7 +31,7 @@ class MikroTikRouterDriver(BaseRouterDriver):
         """Validate configuration settings."""
         pass
 
-    async def get_current_routes(self) -> set[str]:
+    async def get_current_routes(self, force: bool = False) -> set[str]:
         """Fetch current entries in the address list."""
         # When configured, queries GET /rest/ip/firewall/address-list?list={address_list}
         return set(self._active_routes)

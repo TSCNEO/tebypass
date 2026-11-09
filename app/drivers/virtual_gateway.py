@@ -130,8 +130,10 @@ class VirtualGatewayDriver(BaseRouterDriver):
     # Route operations
     # ------------------------------------------------------------------ #
 
-    async def get_current_routes(self) -> set[str]:
+    async def get_current_routes(self, force: bool = False) -> set[str]:
         """Query the active elements, preferring the control socket."""
+        if not force and self._cached_routes:
+            return set(self._cached_routes)
         response = await self._socket_request({"cmd": "list"})
         if response is not None and response.get("ok"):
             elements = {canonical_cidr(str(item)) for item in response.get("elements", [])}
