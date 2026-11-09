@@ -238,11 +238,13 @@ class ReconciliationEngine:
 
     async def _loop(self) -> None:
         """Zero pauses automatic cycles; settings can enable them without a restart."""
+        first = True
         while not self._stop_event.is_set():
             self._wake_event.clear()
             interval = int(settings.sync_interval_seconds)
             if interval > 0:
-                await self.reconcile()
+                await self.reconcile(force=first)
+                first = False
             with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(
                     self._wake_event.wait(),
