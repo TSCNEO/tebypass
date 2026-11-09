@@ -82,7 +82,7 @@ class BaseRouterDriver(ABC):
         """Return operational telemetry from memory without executing remote I/O."""
         return DriverStatus(
             driver_name=self.driver_name,
-            health=DriverHealth.HEALTHY,
+            health=DriverHealth.DEGRADED,
             active_routes_count=0,
             last_sync=None,
             details={},
@@ -93,6 +93,6 @@ class BaseRouterDriver(ABC):
         """Release open connections, file descriptors, or background tasks."""
         pass
 
-    async def teardown(self) -> None:  # noqa: B027 - optional lifecycle hook for drivers supporting remote purge
-        """Purge or remove all routes/rules managed by this driver from the target device."""
-        pass
+    async def teardown(self) -> None:
+        """Purge managed routes, failing explicitly when unsupported."""
+        raise NotImplementedError(f"{self.driver_name} does not support teardown")

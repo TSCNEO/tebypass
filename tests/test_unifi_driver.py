@@ -10,8 +10,8 @@ from app.drivers.unifi import UniFiRouterDriver
 
 
 @pytest.mark.asyncio
-async def test_unifi_driver_unconfigured_fallback() -> None:
-    """Unconfigured driver should behave as a local mock without raising."""
+async def test_unifi_driver_unconfigured_fails() -> None:
+    """Unconfigured production drivers must never simulate successful writes."""
     driver = UniFiRouterDriver()
     driver.controller_url = ""
     driver.api_key = None
@@ -23,9 +23,9 @@ async def test_unifi_driver_unconfigured_fallback() -> None:
         to_add={TargetCIDR(cidr="198.51.100.1/32", target_id="t1")},
         to_remove=set(),
     )
-    assert sync_res.success is True
-    assert sync_res.added_count == 1
-    assert "198.51.100.1/32" in driver._active_routes
+    assert sync_res.success is False
+    assert sync_res.added_count == 0
+    assert not driver._active_routes
 
 
 @pytest.mark.asyncio
@@ -123,7 +123,9 @@ async def test_unifi_teardown_and_purge_endpoint(client: httpx.AsyncClient) -> N
         if request.method == "GET" and "/trafficroutes" in url_str:
             return httpx.Response(
                 200,
-                json=[
+                json=[]
+                if deleted_urls
+                else [
                     {
                         "_id": "route-del-99",
                         "description": "TeByPass",
@@ -150,7 +152,7 @@ async def test_unifi_teardown_and_purge_endpoint(client: httpx.AsyncClient) -> N
     assert len(driver._active_routes) == 0
 
     # Test purge API endpoint
-    with patch.object(UniFiRouterDriver, "teardown", return_value=None):
+    with patch("app.api.settings.get_driver", return_value=driver):
         resp = await client.post("/api/v1/settings/router/purge")
         assert resp.status_code == 200
         data = resp.json()

@@ -135,6 +135,8 @@ class VirtualGatewayDriver(BaseRouterDriver):
         if not force and self._cached_routes:
             return set(self._cached_routes)
         response = await self._socket_request({"cmd": "list"})
+        if response is not None and not response.get("ok"):
+            raise RuntimeError(str(response.get("error") or "Gateway list failed"))
         if response is not None and response.get("ok"):
             elements = {canonical_cidr(str(item)) for item in response.get("elements", [])}
             self._cached_routes = elements
@@ -142,7 +144,7 @@ class VirtualGatewayDriver(BaseRouterDriver):
 
         nft_path = self._nft_binary()
         if not nft_path:
-            return set(self._cached_routes)
+            raise RuntimeError("Gateway unavailable: cannot observe routes")
 
         try:
             cmd = [nft_path, "-j", "list", "set", "inet", "tebypass", self.set_name]
@@ -156,10 +158,10 @@ class VirtualGatewayDriver(BaseRouterDriver):
                 elements = self._parse_nft_json(stdout.decode())
                 self._cached_routes = elements
                 return set(elements)
-        except Exception:
-            pass
+        except Exception as ex:
+            raise RuntimeError("Cannot observe local gateway routes") from ex
 
-        return set(self._cached_routes)
+        raise RuntimeError("Cannot observe local gateway routes")
 
     @staticmethod
     def _parse_nft_json(payload: str) -> set[str]:
@@ -249,22 +251,7 @@ class VirtualGatewayDriver(BaseRouterDriver):
                     error_message=None,
                 )
 
-        # Emulated mode when neither the socket nor nftables is available.
-        for cidr in add_cidrs:
-            self._cached_routes.add(cidr)
-        for cidr in remove_cidrs:
-            self._cached_routes.discard(cidr)
-
-        self._last_sync = datetime.now(UTC)
-        return SyncResult(
-            driver_name=self.driver_name,
-            added_count=len(add_cidrs),
-            removed_count=len(remove_cidrs),
-            total_active=len(self._cached_routes),
-            duration_ms=round((time.perf_counter() - start) * 1000.0, 2),
-            success=True,
-            error_message=None,
-        )
+        return self._failure(start, "Gateway unavailable: no control socket or local nft transport")
 
     def _failure(self, start: float, message: str) -> SyncResult:
         """Build a failed SyncResult without mutating the cached state."""
@@ -290,13 +277,13 @@ class VirtualGatewayDriver(BaseRouterDriver):
 
         nft_path = self._nft_binary()
         details: dict[str, Any] = {
-            "transport": "local_nft" if nft_path else "emulated",
+            "transport": "local_nft" if nft_path else "unavailable",
             "socket_path": self.socket_path() or "none",
             "nft_available": nft_path is not None,
             "set_name": self.set_name,
             "binary_path": nft_path or "none",
         }
-        health = DriverHealth.HEALTHY if nft_path else DriverHealth.DEGRADED
+        health = DriverHealth.DEGRADED if nft_path else DriverHealth.UNHEALTHY
         return DriverStatus(
             driver_name=self.driver_name,
             health=health,
@@ -351,8 +338,31 @@ class VirtualGatewayDriver(BaseRouterDriver):
         return None
 
     async def teardown(self) -> None:
-        """Flush all targets from the nftables set."""
-        if self.socket_path():
-            with contextlib.suppress(Exception):
-                await self._socket_request({"action": "flush"})
+        """Flush the target set and verify the effective remote state."""
+        response = await self._socket_request({"cmd": "flush"})
+        if response is not None:
+            if not response.get("ok"):
+                raise RuntimeError(str(response.get("error") or "Gateway flush failed"))
+            verified = await self._socket_request({"cmd": "list"})
+            if verified is None or not verified.get("ok") or verified.get("elements") != []:
+                raise RuntimeError("Gateway flush could not be verified")
+        else:
+            nft = self._nft_binary()
+            if not nft:
+                raise RuntimeError("Gateway unavailable during teardown")
+            proc = await asyncio.create_subprocess_exec(
+                nft,
+                "flush",
+                "set",
+                "inet",
+                "tebypass",
+                self.set_name,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, stderr = await proc.communicate()
+            if proc.returncode != 0:
+                raise RuntimeError(stderr.decode().strip() or "nft flush failed")
+            if await self.get_current_routes(force=True):
+                raise RuntimeError("Local gateway flush could not be verified")
         self._cached_routes.clear()

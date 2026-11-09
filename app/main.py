@@ -27,6 +27,7 @@ from app.core.resolver import NativeDNSResolver
 from app.core.version import get_version_string
 from app.db.session import init_db
 from app.drivers import get_driver
+from app.drivers.base import SyncResult
 
 BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
@@ -78,16 +79,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await driver.close()
 
 
-async def trigger_reconciliation(force: bool = True) -> None:
-    """Safely invoke a reconciliation cycle on the live engine."""
+def get_engine() -> ReconciliationEngine:
+    """Share the live engine and DNS cache across every entry point."""
     global engine_instance
-    if engine_instance is not None:
-        await engine_instance.reconcile(force=force)
-    else:
-        cache = SlidingWindowCache(default_window_seconds=settings.sliding_window_seconds)
-        resolver = NativeDNSResolver(cache=cache)
-        engine = ReconciliationEngine(driver=None, cache=cache, resolver=resolver)
-        await engine.reconcile(force=force)
+    if engine_instance is None:
+        engine_instance = ReconciliationEngine()
+    return engine_instance
+
+
+async def trigger_reconciliation(force: bool = True) -> SyncResult:
+    """Serialize a reconciliation on the process-wide engine."""
+    return await get_engine().reconcile(force=force)
 
 
 app = FastAPI(

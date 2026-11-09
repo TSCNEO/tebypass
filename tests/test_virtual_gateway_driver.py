@@ -177,9 +177,7 @@ async def test_check_health_alias_is_equivalent(
     assert direct.health == alias.health == DriverHealth.HEALTHY
 
 
-async def test_fallback_without_socket_is_emulated(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_missing_transport_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     driver = VirtualGatewayDriver(socket_path=str(tmp_path / "missing.sock"))
     monkeypatch.setattr(driver, "_nft_binary", lambda: None)
 
@@ -187,31 +185,42 @@ async def test_fallback_without_socket_is_emulated(
         to_add={TargetCIDR(cidr="198.51.100.0/24", target_id="t-1")},
         to_remove=set(),
     )
-    assert result.success is True
-    assert result.added_count == 1
-    assert await driver.get_current_routes() == {"198.51.100.0/24"}
-
+    assert result.success is False
+    assert result.added_count == 0
+    assert not driver._cached_routes
     status = await driver.health_check()
-    assert status.health == DriverHealth.DEGRADED
-    assert status.details["transport"] == "emulated"
-    assert status.active_routes_count == 1
+    assert status.health == DriverHealth.UNHEALTHY
+    assert status.details["transport"] == "unavailable"
 
 
-async def test_unreachable_socket_falls_back(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """A socket file left behind by a dead daemon must not break the driver."""
+async def test_unreachable_socket_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     dead = tmp_path / "dead.sock"
     dead.write_text("")
     driver = VirtualGatewayDriver(socket_path=str(dead))
     monkeypatch.setattr(driver, "_nft_binary", lambda: None)
+    result = await driver.sync_routes({TargetCIDR(cidr="203.0.113.0/24", target_id="t-2")}, set())
+    assert not result.success
+    assert not driver._cached_routes
 
-    result = await driver.sync_routes(
-        to_add={TargetCIDR(cidr="203.0.113.0/24", target_id="t-2")},
-        to_remove=set(),
-    )
-    assert result.success is True
-    assert result.added_count == 1
+
+async def test_teardown_uses_protocol_and_verifies_empty(
+    driver: VirtualGatewayDriver, gateway_socket: FakeGateway
+) -> None:
+    driver._cached_routes = {"198.51.100.7/32"}
+    gateway_socket.handler = lambda payload: {"ok": True, "elements": []}
+    await driver.teardown()
+    assert gateway_socket.requests == [{"cmd": "flush"}, {"cmd": "list"}]
+    assert not driver._cached_routes
+
+
+async def test_teardown_preserves_cache_on_rejection(
+    driver: VirtualGatewayDriver, gateway_socket: FakeGateway
+) -> None:
+    driver._cached_routes = {"198.51.100.7/32"}
+    gateway_socket.handler = lambda payload: {"ok": False, "error": "flush failed"}
+    with pytest.raises(RuntimeError, match="flush failed"):
+        await driver.teardown()
+    assert driver._cached_routes == {"198.51.100.7/32"}
 
 
 def test_canonical_cidr_edge_cases() -> None:

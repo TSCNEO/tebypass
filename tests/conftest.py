@@ -16,12 +16,12 @@ os.environ["TEBYPASS_DATABASE_URL"] = f"sqlite+aiosqlite:///{_TEST_DIR / 'tebypa
 
 async def _reset_database() -> None:
     """Remove every row from the mutable tables."""
-    from app.db.models import AppSetting, Feed, Folder, ResolvedIP, Target
+    from app.db.models import AppSetting, Feed, Folder, ResolvedIP, SyncEvent, Target
     from app.db.session import AsyncSessionLocal, init_db
 
     await init_db()
     async with AsyncSessionLocal() as session:
-        for model in (ResolvedIP, Target, Feed, Folder, AppSetting):
+        for model in (SyncEvent, ResolvedIP, Target, Feed, Folder, AppSetting):
             await session.execute(delete(model))
         await session.commit()
 
@@ -29,12 +29,14 @@ async def _reset_database() -> None:
 @pytest.fixture
 async def db_ready() -> AsyncGenerator[None, None]:
     """Provide a clean database and restore the in-memory settings afterwards."""
+    import app.main
     from app.core.config import settings
     from app.core.settings_store import EDITABLE_KEYS
     from app.drivers import invalidate_driver
 
     snapshot: dict[str, Any] = {key: getattr(settings, key) for key in EDITABLE_KEYS}
     await _reset_database()
+    app.main.engine_instance = None
     invalidate_driver()
 
     yield

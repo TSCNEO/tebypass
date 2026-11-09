@@ -111,7 +111,7 @@ class UniFiRouterDriver(BaseRouterDriver):
     async def get_current_routes(self, force: bool = False) -> set[str]:
         """Fetch current IP members of the TeByPass traffic route."""
         if not self.controller_url or not self.api_key:
-            return set(self._active_routes)
+            raise RuntimeError("UniFi controller URL and API key are required")
 
         if self._routes_loaded and not force:
             return set(self._active_routes)
@@ -121,11 +121,10 @@ class UniFiRouterDriver(BaseRouterDriver):
             url = f"{self.controller_url}{prefix}/v2/api/site/{self.site}/trafficroutes"
             try:
                 resp = await client.get(url)
-                if resp.status_code != 200:
-                    return set(self._active_routes)
+                resp.raise_for_status()
                 routes = resp.json()
                 if not isinstance(routes, list):
-                    return set(self._active_routes)
+                    raise RuntimeError("Invalid UniFi routes response")
                 for r in routes:
                     if isinstance(r, dict) and r.get("description") == self.route_name:
                         ips = {
@@ -136,9 +135,10 @@ class UniFiRouterDriver(BaseRouterDriver):
                         self._active_routes = {str(ip) for ip in ips if ip}
                         self._routes_loaded = True
                         return set(self._active_routes)
+                self._active_routes.clear()
                 self._routes_loaded = True
             except Exception as ex:
-                logger.warning("Failed to query UniFi traffic routes: %s", ex)
+                raise RuntimeError("Failed to query UniFi traffic routes") from ex
         return set(self._active_routes)
 
     async def sync_routes(
@@ -150,20 +150,14 @@ class UniFiRouterDriver(BaseRouterDriver):
         """Create or update the V2 Traffic Route on UniFi."""
         start = time.perf_counter()
         if not self.controller_url or not self.api_key:
-            # Fallback stub for unconfigured controller in tests
-            for item in to_add:
-                self._active_routes.add(item.cidr)
-            for cidr in to_remove:
-                self._active_routes.discard(cidr)
-            self._routes_loaded = True
-            self._last_sync = datetime.now(UTC)
             return SyncResult(
                 driver_name=self.driver_name,
-                added_count=len(to_add),
-                removed_count=len(to_remove),
+                added_count=0,
+                removed_count=0,
                 total_active=len(self._active_routes),
-                duration_ms=round((time.perf_counter() - start) * 1000.0, 2),
-                success=True,
+                duration_ms=0,
+                success=False,
+                error_message="UniFi controller URL and API key are required",
             )
 
         if not to_add and not to_remove and not force and self._routes_loaded:
@@ -338,39 +332,32 @@ class UniFiRouterDriver(BaseRouterDriver):
         pass
 
     async def teardown(self) -> None:
-        """Find and delete the TeByPass traffic route from UniFi."""
+        """Delete managed routes and confirm their absence before clearing memory."""
         if not self.controller_url or not self.api_key:
-            self._active_routes.clear()
-            return
-
+            raise RuntimeError("UniFi controller URL and API key are required")
         async with self._client() as client:
             prefix = await self.discover_prefix(client)
-            routes_url = f"{self.controller_url}{prefix}/v2/api/site/{self.site}/trafficroutes"
-            try:
-                resp = await client.get(routes_url)
-                if resp.status_code == 200:
-                    routes_data = resp.json()
-                    if isinstance(routes_data, list):
-                        for r in routes_data:
-                            if isinstance(r, dict) and r.get("description") == self.route_name:
-                                route_id = r.get("_id")
-                                if route_id:
-                                    del_resp = await client.delete(f"{routes_url}/{route_id}")
-                                    if del_resp.status_code in (200, 204):
-                                        logger.info(
-                                            "Deleted UniFi traffic route %s (%s)",
-                                            self.route_name,
-                                            route_id,
-                                        )
-                                    else:
-                                        logger.warning(
-                                            "Failed to delete UniFi traffic route: %s %s",
-                                            del_resp.status_code,
-                                            del_resp.text[:200],
-                                        )
-            except Exception as ex:
-                logger.warning("Error deleting UniFi traffic route: %s", ex)
-
+            url = f"{self.controller_url}{prefix}/v2/api/site/{self.site}/trafficroutes"
+            response = await client.get(url)
+            response.raise_for_status()
+            routes = response.json()
+            if not isinstance(routes, list):
+                raise RuntimeError("Invalid UniFi routes response")
+            for route in routes:
+                if isinstance(route, dict) and route.get("description") == self.route_name:
+                    route_id = route.get("_id")
+                    if not route_id:
+                        raise RuntimeError("Managed UniFi route has no ID")
+                    deleted = await client.delete(f"{url}/{route_id}")
+                    deleted.raise_for_status()
+            verified = await client.get(url)
+            verified.raise_for_status()
+            remaining = verified.json()
+            if not isinstance(remaining, list) or any(
+                isinstance(route, dict) and route.get("description") == self.route_name
+                for route in remaining
+            ):
+                raise RuntimeError("UniFi teardown could not be verified")
         self._active_routes.clear()
         self._routes_loaded = False
         self._last_sync = datetime.now(UTC)

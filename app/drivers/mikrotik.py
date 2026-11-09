@@ -1,7 +1,6 @@
 """Router driver for MikroTik RouterOS v7 REST API (Address Lists)."""
 
-import time
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
 from app.core.config import settings
@@ -33,8 +32,7 @@ class MikroTikRouterDriver(BaseRouterDriver):
 
     async def get_current_routes(self, force: bool = False) -> set[str]:
         """Fetch current entries in the address list."""
-        # When configured, queries GET /rest/ip/firewall/address-list?list={address_list}
-        return set(self._active_routes)
+        raise NotImplementedError("MikroTik routing is not implemented")
 
     async def sync_routes(
         self,
@@ -42,25 +40,14 @@ class MikroTikRouterDriver(BaseRouterDriver):
         to_remove: set[str],
     ) -> SyncResult:
         """Apply incremental changes to MikroTik address-list."""
-        start = time.perf_counter()
-
-        for item in to_add:
-            self._active_routes.add(item.cidr)
-
-        for cidr in to_remove:
-            self._active_routes.discard(cidr)
-
-        self._last_sync = datetime.now(UTC)
-        duration_ms = (time.perf_counter() - start) * 1000.0
-
         return SyncResult(
             driver_name=self.driver_name,
-            added_count=len(to_add),
-            removed_count=len(to_remove),
-            total_active=len(self._active_routes),
-            duration_ms=round(duration_ms, 2),
-            success=True,
-            error_message=None,
+            added_count=0,
+            removed_count=0,
+            total_active=0,
+            duration_ms=0,
+            success=False,
+            error_message="MikroTik routing is not implemented; use a supported driver",
         )
 
     async def health_check(self) -> DriverStatus:
@@ -71,7 +58,8 @@ class MikroTikRouterDriver(BaseRouterDriver):
             "address_list": self.address_list,
             "configured": is_configured,
         }
-        health = DriverHealth.HEALTHY if is_configured else DriverHealth.DEGRADED
+        details["implemented"] = False
+        health = DriverHealth.UNHEALTHY
         return DriverStatus(
             driver_name=self.driver_name,
             health=health,

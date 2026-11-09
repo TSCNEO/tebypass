@@ -87,3 +87,7 @@ class MockRouterDriver(BaseRouterDriver):
     async def close(self) -> None:
         """Clear memory structures."""
         self._routes.clear()
+
+    async def teardown(self) -> None:
+        """Remove every simulated route."""
+        self._routes.clear()

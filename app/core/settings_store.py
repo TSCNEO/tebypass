@@ -175,6 +175,14 @@ async def load_into_settings() -> None:
 
 
 async def save_settings(payload: dict[str, Any]) -> None:
+    """Apply settings between reconciliation cycles."""
+    from app.core.engine import ROUTING_LOCK
+
+    async with ROUTING_LOCK:
+        await _save_settings(payload)
+
+
+async def _save_settings(payload: dict[str, Any]) -> None:
     """Validate, persist (encrypting secrets) and hot-apply a batch of settings.
 
     Unknown keys are ignored, as are ``None``/empty values and the ``***saved***`` mask so a

@@ -19,6 +19,9 @@ from app.drivers.base import BaseRouterDriver, SyncResult, TargetCIDR
 
 logger = logging.getLogger("tebypass.engine")
 
+# All API and periodic engines share one writer lock.
+ROUTING_LOCK = asyncio.Lock()
+
 
 class ReconciliationEngine:
     """Core engine responsible for calculating diffs and keeping router state synchronized."""
@@ -36,7 +39,7 @@ class ReconciliationEngine:
         self.sync_interval = sync_interval_seconds
         self._background_task: asyncio.Task[None] | None = None
         self._stop_event = asyncio.Event()
-        self._is_syncing = asyncio.Lock()
+        self._is_syncing = ROUTING_LOCK
 
     @property
     def driver(self) -> BaseRouterDriver:
@@ -50,153 +53,180 @@ class ReconciliationEngine:
         self._explicit_driver = value
 
     async def reconcile(self, force: bool = False) -> SyncResult:
-        """Execute a complete reconciliation cycle: refresh feeds, resolve, diff and dispatch."""
+        """Serialize all writes and persist failures, including observation errors."""
         async with self._is_syncing:
-            start_time = time.perf_counter()
-            now = datetime.now(UTC)
-
-            if not settings.routing_enabled:
-                logger.info("Routing is globally disabled; tearing down any active router rules.")
-                try:
-                    await self.driver.teardown()
-                except Exception as ex:
-                    logger.warning("Driver teardown failed while routing disabled: %s", ex)
-                return SyncResult(
-                    driver_name=self.driver.driver_name,
+            driver = self.driver
+            try:
+                return await self._reconcile(driver, force)
+            except Exception as ex:
+                logger.warning("Reconciliation failed: %s", ex)
+                result = SyncResult(
+                    driver_name=driver.driver_name,
                     added_count=0,
                     removed_count=0,
-                    total_active=0,
-                    duration_ms=round((time.perf_counter() - start_time) * 1000.0, 2),
-                    success=True,
+                    total_active=-1,
+                    duration_ms=0,
+                    success=False,
+                    error_message=str(ex),
                 )
+                await self._record_result(result, datetime.now(UTC))
+                return result
 
-            # 0. Refresh any remote feed that is due (respecting its enabled toggle)
-            async with AsyncSessionLocal() as feed_session:
-                try:
-                    await refresh_due_feeds(
-                        feed_session,
-                        settings.sync_interval_seconds,
-                        force=force,
-                    )
-                except Exception as ex:  # noqa: BLE001 - never abort a sync because of a feed
-                    logger.warning("Feed refresh failed: %s", ex)
+    async def _reconcile(self, driver: BaseRouterDriver, force: bool) -> SyncResult:
+        """Reconcile using a driver fixed for the whole cycle."""
+        start_time = time.perf_counter()
+        now = datetime.now(UTC)
 
-            # 1. Fetch enabled targets from DB (a disabled feed contributes nothing)
-            desired_targets: dict[str, TargetCIDR] = {}
+        if not settings.routing_enabled:
+            error = None
+            current: set[str] | None = None
+            try:
+                current = await driver.get_current_routes(force=True)
+                await driver.teardown()
+            except Exception as ex:
+                error = str(ex)
+                logger.warning("Driver teardown failed while routing disabled: %s", ex)
+            result = SyncResult(
+                driver_name=driver.driver_name,
+                added_count=0,
+                removed_count=len(current or ()) if error is None else 0,
+                total_active=0 if error is None else (len(current) if current is not None else -1),
+                duration_ms=round((time.perf_counter() - start_time) * 1000.0, 2),
+                success=error is None,
+                error_message=error,
+            )
+            await self._record_result(result, now)
+            return result
 
-            async with AsyncSessionLocal() as session:
-                query = (
-                    select(Target)
-                    .join(Feed, Target.feed_id == Feed.id, isouter=True)
-                    .where(
-                        Target.enabled.is_(True),
-                        or_(Target.feed_id.is_(None), Feed.enabled.is_(True)),
-                    )
+        # 0. Refresh any remote feed that is due (respecting its enabled toggle)
+        async with AsyncSessionLocal() as feed_session:
+            try:
+                await refresh_due_feeds(
+                    feed_session,
+                    settings.sync_interval_seconds,
+                    force=force,
                 )
-                result = await session.execute(query)
-                targets = result.scalars().all()
+            except Exception as ex:  # noqa: BLE001 - never abort a sync because of a feed
+                logger.warning("Feed refresh failed: %s", ex)
 
-                for t in targets:
-                    if t.destination_type == "cidr":
-                        cidr_val = t.value.strip()
-                        desired_targets[cidr_val] = TargetCIDR(
-                            cidr=cidr_val,
+        # 1. Fetch enabled targets from DB (a disabled feed contributes nothing)
+        desired_targets: dict[str, TargetCIDR] = {}
+
+        async with AsyncSessionLocal() as session:
+            query = (
+                select(Target)
+                .join(Feed, Target.feed_id == Feed.id, isouter=True)
+                .where(
+                    Target.enabled.is_(True),
+                    or_(Target.feed_id.is_(None), Feed.enabled.is_(True)),
+                )
+            )
+            rows = await session.execute(query)
+            targets = rows.scalars().all()
+
+            for t in targets:
+                if t.destination_type == "cidr":
+                    cidr_val = t.value.strip()
+                    desired_targets[cidr_val] = TargetCIDR(
+                        cidr=cidr_val,
+                        target_id=t.id,
+                        description=t.description or f"Direct CIDR target {t.value}",
+                    )
+                elif t.destination_type == "fqdn":
+                    # Resolve FQDN via native DNS resolver
+                    resolutions = await self.resolver.resolve_fqdn(
+                        fqdn=t.value,
+                        window_extension_seconds=settings.sliding_window_seconds,
+                    )
+                    for r in resolutions:
+                        desired_targets[r.cidr] = TargetCIDR(
+                            cidr=r.cidr,
                             target_id=t.id,
-                            description=t.description or f"Direct CIDR target {t.value}",
+                            description=f"Resolved from {t.value}",
+                            expires_at=r.expires_at,
                         )
-                    elif t.destination_type == "fqdn":
-                        # Resolve FQDN via native DNS resolver
-                        resolutions = await self.resolver.resolve_fqdn(
-                            fqdn=t.value,
-                            window_extension_seconds=settings.sliding_window_seconds,
+                        # Persist or update resolved IP record
+                        res_ip_query = select(ResolvedIP).where(
+                            ResolvedIP.target_id == t.id,
+                            ResolvedIP.ip_address == r.ip_address,
                         )
-                        for r in resolutions:
-                            desired_targets[r.cidr] = TargetCIDR(
-                                cidr=r.cidr,
-                                target_id=t.id,
-                                description=f"Resolved from {t.value}",
-                                expires_at=r.expires_at,
-                            )
-                            # Persist or update resolved IP record
-                            res_ip_query = select(ResolvedIP).where(
-                                ResolvedIP.target_id == t.id,
-                                ResolvedIP.ip_address == r.ip_address,
-                            )
-                            existing_ip = (await session.execute(res_ip_query)).scalar_one_or_none()
-                            if existing_ip:
-                                existing_ip.last_seen_at = now
-                                existing_ip.expires_at = r.expires_at
-                            else:
-                                session.add(
-                                    ResolvedIP(
-                                        target_id=t.id,
-                                        ip_address=r.ip_address,
-                                        cidr=r.cidr,
-                                        first_seen_at=now,
-                                        last_seen_at=now,
-                                        expires_at=r.expires_at,
-                                        ttl_seconds=r.dns_ttl,
-                                    )
+                        existing_ip = (await session.execute(res_ip_query)).scalar_one_or_none()
+                        if existing_ip:
+                            existing_ip.last_seen_at = now
+                            existing_ip.expires_at = r.expires_at
+                        else:
+                            session.add(
+                                ResolvedIP(
+                                    target_id=t.id,
+                                    ip_address=r.ip_address,
+                                    cidr=r.cidr,
+                                    first_seen_at=now,
+                                    last_seen_at=now,
+                                    expires_at=r.expires_at,
+                                    ttl_seconds=r.dns_ttl,
                                 )
+                            )
 
-                # Purge cache entries that expired beyond the sliding window
-                await self.cache.purge_expired(now)
-                await session.commit()
+            # Purge cache entries that expired beyond the sliding window
+            await self.cache.purge_expired(now)
+            await session.commit()
 
-            # 2. Query router driver for current routes (cached in memory unless force=True)
-            current_routes = await self.driver.get_current_routes(force=force)
+        # 2. Query router driver for current routes (cached in memory unless force=True)
+        current_routes = await driver.get_current_routes(force=force)
 
-            # 3. Compute differences
-            desired_cidrs = set(desired_targets.keys())
-            cidrs_to_add = desired_cidrs - current_routes
-            cidrs_to_remove = current_routes - desired_cidrs
+        # 3. Compute differences
+        desired_cidrs = set(desired_targets.keys())
+        cidrs_to_add = desired_cidrs - current_routes
+        cidrs_to_remove = current_routes - desired_cidrs
 
-            to_add_objects = {desired_targets[c] for c in cidrs_to_add}
+        to_add_objects = {desired_targets[c] for c in cidrs_to_add}
 
-            logger.info(
-                "Reconciliation diff: %d to add, %d to remove, %d desired, %d current",
-                len(to_add_objects),
-                len(cidrs_to_remove),
-                len(desired_cidrs),
+        logger.info(
+            "Reconciliation diff: %d to add, %d to remove, %d desired, %d current",
+            len(to_add_objects),
+            len(cidrs_to_remove),
+            len(desired_cidrs),
+            len(current_routes),
+        )
+
+        if not to_add_objects and not cidrs_to_remove and not force:
+            logger.debug(
+                "No route changes needed (%d routes active); skipping router sync.",
                 len(current_routes),
             )
-
-            if not to_add_objects and not cidrs_to_remove and not force:
-                logger.debug(
-                    "No route changes needed (%d routes active); skipping router sync.",
-                    len(current_routes),
-                )
-                return SyncResult(
-                    driver_name=self.driver.driver_name,
-                    added_count=0,
-                    removed_count=0,
-                    total_active=len(current_routes),
-                    duration_ms=round((time.perf_counter() - start_time) * 1000.0, 2),
-                    success=True,
-                )
-
-            # 4. Apply changes via driver
-            sync_res = await self.driver.sync_routes(
-                to_add=to_add_objects,
-                to_remove=cidrs_to_remove,
+            return SyncResult(
+                driver_name=driver.driver_name,
+                added_count=0,
+                removed_count=0,
+                total_active=len(current_routes),
+                duration_ms=round((time.perf_counter() - start_time) * 1000.0, 2),
+                success=True,
             )
 
-            # 5. Persist audit sync event
-            async with AsyncSessionLocal() as session:
-                sync_event = SyncEvent(
-                    driver_name=self.driver.driver_name,
-                    added_count=sync_res.added_count,
-                    removed_count=sync_res.removed_count,
-                    total_active=sync_res.total_active,
-                    duration_ms=round((time.perf_counter() - start_time) * 1000.0, 2),
-                    success=sync_res.success,
-                    error_message=sync_res.error_message,
+        # 4. Apply changes via driver
+        sync_res = await driver.sync_routes(
+            to_add=to_add_objects,
+            to_remove=cidrs_to_remove,
+        )
+
+        await self._record_result(sync_res, now)
+        return sync_res
+
+    async def _record_result(self, result: SyncResult, now: datetime) -> None:
+        async with AsyncSessionLocal() as session:
+            session.add(
+                SyncEvent(
+                    driver_name=result.driver_name,
+                    added_count=result.added_count,
+                    removed_count=result.removed_count,
+                    total_active=result.total_active,
+                    duration_ms=result.duration_ms,
+                    success=result.success,
+                    error_message=result.error_message,
                     executed_at=now,
                 )
-                session.add(sync_event)
-                await session.commit()
-
-            return sync_res
+            )
+            await session.commit()
 
     async def _loop(self) -> None:
         """Internal periodic background loop."""

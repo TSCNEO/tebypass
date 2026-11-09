@@ -10,7 +10,6 @@ from sqlalchemy.orm import selectinload
 
 from app.core.cache import SlidingWindowCache
 from app.core.config import settings
-from app.core.engine import ReconciliationEngine
 from app.core.feeds import FeedManager
 from app.core.resolver import NativeDNSResolver
 from app.core.targets import as_utc, dedupe_key, detect_destination_type
@@ -84,11 +83,9 @@ async def _resolve_and_persist(db: AsyncSession, target: Target) -> list[str]:
 async def _trigger_background_reconciliation() -> None:
     """Best-effort trigger to immediately push changes to router or gateway."""
     try:
-        driver = get_driver()
-        cache = SlidingWindowCache(default_window_seconds=settings.sliding_window_seconds)
-        resolver = NativeDNSResolver(cache=cache)
-        engine = ReconciliationEngine(driver=driver, cache=cache, resolver=resolver)
-        await engine.reconcile(force=False)
+        from app.main import trigger_reconciliation
+
+        await trigger_reconciliation(force=False)
     except Exception as ex:
         logger.warning("Auto-reconciliation after target change failed: %s", ex)
 
@@ -323,13 +320,10 @@ async def trigger_sync(
     payload: SyncTriggerRequest | None = None,
 ) -> SyncResponse:
     """Manually trigger route reconciliation with router driver."""
-    driver = get_driver()
-    cache = SlidingWindowCache(default_window_seconds=settings.sliding_window_seconds)
-    resolver = NativeDNSResolver(cache=cache)
-    engine = ReconciliationEngine(driver=driver, cache=cache, resolver=resolver)
+    from app.main import trigger_reconciliation
 
     force = payload.force if payload else False
-    result = await engine.reconcile(force=force)
+    result = await trigger_reconciliation(force=force)
 
     return SyncResponse(
         driver_name=result.driver_name,

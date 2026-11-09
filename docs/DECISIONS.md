@@ -241,3 +241,27 @@ En routers UniFi OS modernos (Cloud Gateway Ultra/Max/Fiber, Dream Machine Pro/S
   - Desacoplamiento total: no requiere agentes en los dispositivos clientes ni alterar el gateway por DHCP en redes con enrutador avanzado.
 - **Negativas / Trade-offs**:
   - Requiere que el usuario tenga configurado al menos un cliente VPN/WireGuard en su UniFi Network.
+
+---
+
+## ADR-012: Control de rutas serializado y apagado verificable
+
+### Estado
+Aceptado; primera entrega de la auditoría funcional.
+
+### Decisión
+- Todas las reconciliaciones del proceso comparten un bloqueo de escritura. La API usa
+  el motor vivo y su caché; guardar ajustes y purgar se coordinan con ese mismo bloqueo.
+- Cada ciclo captura una instancia de driver. Los fallos de observación y apagado se
+  registran como SyncEvent fallido; `total_active=-1` expresa estado desconocido.
+- Mock es el único driver que simula escrituras. UniFi sin configuración, MikroTik aún
+  sin implementación y gateway sin transporte no pueden acreditar éxito operativo.
+- El contrato de teardown exige error explícito si no está soportado. UniFi verifica
+  que no queden reglas propias; gateway envía `cmd=flush` y comprueba el set vacío.
+
+### Consecuencias
+Se sustituye el fallback emulado de ADR-010 por fallo explícito. ADR-011 describe el
+primer soporte UniFi, pero su afirmación de paridad completa queda retirada: faltan los
+formatos adicionales y las garantías identificadas en la auditoría. El contrato completo
+por política y las transiciones entre drivers se desarrollarán en entregas posteriores.
+El bloqueo es por proceso: el despliegue soportado usa un único worker de control.
