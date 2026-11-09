@@ -58,3 +58,9 @@ En el entorno autorizado se verificaron también DNS y HTTPS directo, cadena for
 abierta y una conexión HTTPS marcada por WireGuard que obtuvo HTTP 200 y estableció
 handshake. Estas evidencias no sustituyen la revisión de IP, máscara, DNS y aislamiento
 Wi-Fi del móvil concreto que reportó el problema.
+
+La prueba de reenvío se amplió con un peer WireGuard real aislado: el cliente obtiene
+DNS/HTTP por el túnel y completa subida y descarga de 256 KiB. Al eliminar la interfaz
+del túnel, el destino seleccionado queda bloqueado; al retirar la selección recupera
+la salida normal. Los peers usan claves efímeras independientes de cualquier proveedor.
+Esta ampliación pasó sobre la imagen desplegada y se ejecuta mediante el mismo job de CI.

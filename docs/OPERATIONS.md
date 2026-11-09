@@ -159,6 +159,7 @@ adicional de CI crea una LAN Docker aislada, un cliente y un endpoint DNS/HTTP d
 python scripts/verify_gateway_forwarding.py --image tebypass-gateway:verify
 ```
 
-Comprueba tráfico que entra y sale por la misma interfaz, vuelta por NAT, DNS, HTTP,
-fail-closed para el destino seleccionado y recuperación al retirarlo. Se eliminan los
+Comprueba tráfico que entra y sale por la misma interfaz, vuelta por NAT, DNS y HTTP
+directos y a través de un peer WireGuard con claves efímeras. Verifica transferencias de
+256 KiB en ambos sentidos, caída del túnel, fail-closed y recuperación al retirar el destino. Se eliminan los
 contenedores y la red de prueba; no modifica la LAN ni usa volúmenes del despliegue.
