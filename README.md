@@ -74,6 +74,33 @@ docker compose exec tebypass cat /data/admin_token
 Para las siguientes operaciones de una instalación compilada se deben conservar ambos
 archivos Compose. Consulta [actualización y copias](docs/OPERATIONS.md).
 
+## Ejemplo: una TV o PC con gateway virtual
+
+Después de [preparar y arrancar el gateway](docs/INSTALLATION.md#5-solo-si-se-ha-elegido-gateway-virtual),
+selecciona `virtual_gateway` en Ajustes, sube WireGuard y comprueba su estado.
+**En cada dispositivo que vaya a utilizarlo, cambia la puerta de enlace por la IP LAN
+del gateway virtual**, que puede ser distinta de la IP del servidor del panel.
+
+Ejemplo ficticio, solo de documentación; sustituye los valores por los de tu LAN:
+
+| Ajuste del dispositivo | Antes | Con gateway virtual |
+|---|---|---|
+| IP de la TV/PC | `192.0.2.50` | `192.0.2.50` |
+| Máscara | `255.255.255.0` | `255.255.255.0` |
+| Puerta de enlace | `192.0.2.1` (router) | `192.0.2.26` (gateway virtual) |
+| DNS | `192.0.2.1` | `192.0.2.1` (DNS habitual) |
+
+En la TV suele estar en **Red → Configuración IP → Manual**; los nombres varían por
+fabricante. Guarda primero los ajustes anteriores. Si pasas de DHCP a manual, utiliza
+una IP reservada o excluida del pool para evitar duplicados. El gateway debe ser accesible
+desde la misma LAN. **No pongas su IP como DNS:** el sidecar no ofrece servidor DNS.
+
+El recorrido será dispositivo → gateway virtual → VPN para destinos seleccionados;
+el resto saldrá por el router habitual. Arrancar Docker por sí solo no cambia el
+recorrido de los dispositivos. Prueba primero uno y verifica ambos tipos de tráfico.
+Para revertir, restaura la puerta de enlace anterior o el modo DHCP si era el original.
+Con drivers de router compatibles no hace falta este cambio en los clientes.
+
 ## Alcance
 
 - Una política de salida y un driver por instalación; las carpetas organizan destinos.
