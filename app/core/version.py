@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
-DEFAULT_VERSION = "0.1.0"
+DEFAULT_VERSION = "0.1.1"
 
 
 def _read_git_head_pure(git_dir: Path) -> str:

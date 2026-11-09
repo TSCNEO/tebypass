@@ -399,9 +399,26 @@
                 <input x-model="settings.unifi_site" placeholder="default" class="mono">
               </div>
             </div>
-            <div>
-              <label class="field">Nombre del grupo de IPs</label>
-              <input x-model="settings.unifi_group_name" placeholder="TeByPass_Targets" class="mono">
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="field">Nombre de la ruta de tráfico</label>
+                <input x-model="settings.unifi_route_name" placeholder="TeByPass" class="mono">
+              </div>
+              <div>
+                <div class="flex items-center justify-between mb-1">
+                  <label class="field mb-0">Interfaz WireGuard / VPN</label>
+                  <button type="button" @click="loadUnifiVpns()" :disabled="busyVpn" class="text-[10px] text-amber-500 hover:text-amber-400">
+                    <span x-show="!busyVpn">↻ Detectar</span>
+                    <span x-show="busyVpn">...</span>
+                  </button>
+                </div>
+                <select x-model="settings.unifi_vpn_network_id" class="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-200 mono">
+                  <option value="">-- Autodetectar primera VPN --</option>
+                  <template x-for="vpn in unifiVpnNetworks" :key="vpn.id">
+                    <option :value="vpn.id" x-text="vpn.name + ' (' + vpn.type + ')'" :selected="settings.unifi_vpn_network_id === vpn.id"></option>
+                  </template>
+                </select>
+              </div>
             </div>
             <p class="text-[11px] text-slate-600">Si prefieres usuario y contraseña en vez de API Key, rellénalos aquí:</p>
             <div class="grid grid-cols-2 gap-3">
@@ -532,6 +549,8 @@ function tebypass() {
     feed: null,
     settings: {},
     settingsLoaded: false,
+    unifiVpnNetworks: [],
+    busyVpn: false,
     wg: { configured: false, peers: 0, uploaded_at: null, preview: '' },
     wgContent: '',
     activeFolder: null,
@@ -639,7 +658,23 @@ function tebypass() {
       try {
         this.settings = await this.api('GET', '/api/v1/settings');
         if (this.settings.feed_force_active === undefined) this.settings.feed_force_active = false;
+        if (this.settings.router_driver === 'unifi') {
+          this.loadUnifiVpns();
+        }
       } catch (e) { this.fail(e); }
+    },
+
+    async loadUnifiVpns() {
+      if (this.busyVpn) return;
+      this.busyVpn = true;
+      try {
+        const list = await this.api('GET', '/api/v1/settings/unifi/vpn-networks');
+        this.unifiVpnNetworks = Array.isArray(list) ? list : [];
+      } catch (e) {
+        console.warn('Could not load UniFi VPNs:', e);
+      } finally {
+        this.busyVpn = false;
+      }
     },
 
     async loadWg() {
@@ -772,7 +807,11 @@ function tebypass() {
       this.busy.sync = false;
     },
 
-    openSettings() { this.routerTest = null; this.showSettings = true; },
+    openSettings() {
+      this.routerTest = null;
+      this.showSettings = true;
+      if (this.settings.router_driver === 'unifi') this.loadUnifiVpns();
+    },
 
     async saveAllSettings() {
       this.busy.settings = true;

@@ -27,7 +27,12 @@ SECRET_KEYS: Final[set[str]] = {
 MASKED_SECRET: Final[str] = "***saved***"
 
 _INT_KEYS: Final[set[str]] = {"sync_interval_seconds", "sliding_window_seconds"}
-_BOOL_KEYS: Final[set[str]] = {"feed_force_active", "gateway_fail_closed", "resolve_ipv6"}
+_BOOL_KEYS: Final[set[str]] = {
+    "feed_force_active",
+    "gateway_fail_closed",
+    "resolve_ipv6",
+    "unifi_verify_tls",
+}
 # Bootstrap/internal keys: not editable from the UI (changing them at runtime cannot take effect)
 _NON_EDITABLE_KEYS: Final[set[str]] = {
     "host",

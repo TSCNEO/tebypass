@@ -185,6 +185,14 @@ class RouterTestResponse(BaseModel):
     details: dict[str, Any] = Field(default_factory=dict)
 
 
+class UniFiVPNNetwork(BaseModel):
+    """UniFi VPN Client (WireGuard / OpenVPN) network definition."""
+
+    id: str
+    name: str
+    type: str = "wireguard-client"
+
+
 class WireGuardStatusResponse(BaseModel):
     """State of the uploaded WireGuard client configuration."""
 

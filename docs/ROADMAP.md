@@ -56,7 +56,7 @@ Este documento detalla las fases de desarrollo de **TeByPass**, desglosadas en t
 - [x] **Tarea 2.2: Driver VirtualGateway (`app/drivers/virtual_gateway.py`)**
   - Criterio de Aceptación: Driver capaz de comunicarse con el sidecar de nftables para añadir/eliminar prefijos en el set dinámico.
 - [x] **Tarea 2.3: Driver UniFi Network (`app/drivers/unifi.py`)**
-  - Criterio de Aceptación: Integración con UniFi Network Application mediante API REST oficial para actualizar grupos de firewall de tipo dirección IP (IP Groups) vía API Key o usuario/contraseña.
+  - Criterio de Aceptación: Integración con UniFi Network Application mediante API V2 de Traffic Routes (`/v2/api/site/{site}/trafficroutes`) y descubrimiento dinámico de clientes WireGuard/VPN (`/rest/networkconf`) para enrutamiento por políticas en routers UniFi OS (Cloud Gateway, UDM, UXG).
 - [x] **Tarea 2.4: Driver MikroTik RouterOS (`app/drivers/mikrotik.py`)**
   - Criterio de Aceptación: Integración con RouterOS v7 mediante la API REST (`/rest/ip/firewall/address-list`), soportando timeouts y reintentos exponenciales.
 

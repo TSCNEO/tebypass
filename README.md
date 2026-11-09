@@ -76,7 +76,7 @@ Si no las defines, se usan esos mismos valores por defecto.
 | | **Modo Router** (recomendado) | **Modo Gateway virtual** |
 | :--- | :--- | :--- |
 | **Para qué** | Ya tienes UniFi o MikroTik | Router de operadora, sin opciones avanzadas |
-| **Cómo funciona** | TeByPass crea y mantiene una lista de IPs en el propio router (firewall group en UniFi, address-list en MikroTik) | Un contenedor Alpine con WireGuard y nftables hace de puerta de enlace para los dispositivos que quieras |
+| **Cómo funciona** | TeByPass crea y mantiene una ruta de tráfico en el router (Traffic Routes V2 hacia WireGuard en UniFi, address-list en MikroTik) | Un contenedor Alpine con WireGuard y nftables hace de puerta de enlace para los dispositivos que quieras |
 | **Dónde va el túnel** | En el router | En el contenedor `tebypass-gateway` |
 | **Qué toca tu red** | Nada más que la lista de IPs | Los dispositivos apuntan su puerta de enlace al gateway |
 | **Ventaja** | Sin saltos extra, cero latencia añadida | No necesitas cambiar de router |

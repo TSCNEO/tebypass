@@ -8,7 +8,8 @@ from fastapi import APIRouter, HTTPException
 from app.core.config import settings
 from app.core.settings_store import masked_dump, save_settings
 from app.drivers import get_router_driver
-from app.models.schemas import RouterTestResponse
+from app.drivers.unifi import UniFiRouterDriver
+from app.models.schemas import RouterTestResponse, UniFiVPNNetwork
 
 logger = logging.getLogger("tebypass.api.settings")
 
@@ -29,6 +30,30 @@ async def update_settings(payload: dict[str, Any]) -> dict[str, Any]:
     except ValueError as ex:
         raise HTTPException(status_code=400, detail=str(ex)) from ex
     return masked_dump()
+
+
+@router.get("/settings/unifi/vpn-networks", response_model=list[UniFiVPNNetwork])
+async def list_unifi_vpn_networks() -> list[UniFiVPNNetwork]:
+    """Query the UniFi controller for available VPN Client networks."""
+    driver = UniFiRouterDriver()
+    try:
+        networks = await driver.get_vpn_networks()
+        return [
+            UniFiVPNNetwork(
+                id=net["id"],
+                name=net["name"],
+                type=net.get("type", "wireguard-client"),
+            )
+            for net in networks
+        ]
+    except Exception as ex:
+        logger.warning("Failed to fetch UniFi VPN networks: %s", ex)
+        raise HTTPException(
+            status_code=502,
+            detail=f"Error connecting to UniFi controller: {ex}",
+        ) from ex
+    finally:
+        await driver.close()
 
 
 @router.post("/settings/test-router", response_model=RouterTestResponse)

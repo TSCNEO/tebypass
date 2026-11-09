@@ -113,7 +113,7 @@ sequenceDiagram
 - `base.py`: Define el contrato formal `BaseRouterDriver` y las estructuras de datos (`TargetCIDR`, `SyncResult`, `DriverStatus`).
 - `mock.py`: Implementación en memoria que simula la tabla de rutas para pruebas automatizadas y ejecución local sin hardware.
 - `virtual_gateway.py`: Driver del sidecar de red. Orden de transporte: socket Unix `/data/gateway.sock` (preferido, el sidecar es el único que toca `nftables`), binario `nft` local (la app corre con `NET_ADMIN` en el mismo namespace), o caché emulada (tests y ejecución sin red).
-- `unifi.py`: Driver para controladores UniFi Dream Machine / Cloud Gateway mediante la API de firewall groups o rutas estáticas.
+- `unifi.py`: Driver para controladores UniFi Dream Machine / Cloud Gateway mediante la API V2 de Traffic Routes (`/v2/api/site/{site}/trafficroutes`), asociando el tráfico bloqueado al túnel WireGuard/VPN del router (`/rest/networkconf`).
 - `mikrotik.py`: Driver para MikroTik RouterOS v7 usando la API REST `/ip/firewall/address-list`.
 
 ---

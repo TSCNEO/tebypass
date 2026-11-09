@@ -96,7 +96,29 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices(
             "TEBYPASS_UNIFI_GROUP_NAME",
             "UNIFI_GROUP_NAME",
+        ),
+    )
+    unifi_route_name: str = Field(
+        default="TeByPass",
+        validation_alias=AliasChoices(
+            "TEBYPASS_UNIFI_ROUTE_NAME",
+            "UNIFI_ROUTE_NAME",
             "STOPLIGA_ROUTE_NAME",
+        ),
+    )
+    unifi_vpn_network_id: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "TEBYPASS_UNIFI_VPN_NETWORK_ID",
+            "UNIFI_VPN_NETWORK_ID",
+        ),
+    )
+    unifi_verify_tls: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "TEBYPASS_UNIFI_VERIFY_TLS",
+            "UNIFI_VERIFY_TLS",
+            "STOPLIGA_CONTROLLER_VERIFY_TLS",
         ),
     )
 

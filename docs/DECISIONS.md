@@ -218,3 +218,26 @@ Para que el gateway virtual sirva a dispositivos reales, el sidecar debe ser su 
 - **Negativas / Trade-offs**:
   - Las redes macvlan no permiten que el propio host anfitrión hable con el contenedor; las comprobaciones deben hacerse desde otro equipo de la LAN.
   - La red macvlan debe crearse una vez en el host antes de levantar el perfil `gateway`.
+
+---
+
+## ADR-011: Driver UniFi mediante API V2 Traffic Routes y descubrimiento de interfaces WireGuard/VPN
+
+### Estado
+**Aceptado**
+
+### Contexto
+En routers UniFi OS modernos (Cloud Gateway Ultra/Max/Fiber, Dream Machine Pro/SE, UniFi Express), los grupos de firewall tradicionales no crean rutas de política ni enrutan selectivamente el tráfico de clientes LAN hacia interfaces VPN específicas de WireGuard. StopLiga demostró que la vía canónica es la API V2 de Traffic Routes (`/v2/api/site/{site}/trafficroutes`), donde cada ruta asocia destinos IP (`matching_target: "IP"`) a una interfaz de cliente VPN (`network_id`), aplicando `target_devices: [{"type": "ALL_CLIENTS"}]`.
+
+### Decisión
+1. Reemplazar los stubs de UniFi con una implementación `httpx.AsyncClient` asíncrona real.
+2. Descubrir automáticamente interfaces de cliente VPN en `/api/s/{site}/rest/networkconf` (`purpose: "vpn-client"`).
+3. Gestionar la ruta de tráfico con `POST` para creación y `PUT /v2/api/site/{site}/trafficroutes/{id}` para sincronización idempotente del listado de IPs.
+4. Exponer selector web en la UI con endpoint `/api/v1/settings/unifi/vpn-networks` para que el usuario elija dinámicamente qué interfaz WireGuard del router cursará el tráfico de los destinos bloqueados.
+
+### Consecuencias
+- **Positivas**:
+  - Paridad funcional 100% con StopLiga y soporte nativo para redes con VLANs y UniFi Cloud Gateways.
+  - Desacoplamiento total: no requiere agentes en los dispositivos clientes ni alterar el gateway por DHCP en redes con enrutador avanzado.
+- **Negativas / Trade-offs**:
+  - Requiere que el usuario tenga configurado al menos un cliente VPN/WireGuard en su UniFi Network.
