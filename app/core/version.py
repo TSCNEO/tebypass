@@ -52,7 +52,9 @@ def _get_git_info() -> dict[str, str]:
         if build_stamp.exists():
             c = build_stamp.read_text(encoding="utf-8").strip()
             if c:
-                return {"commit": c[:7], "commit_count": "0", "tag": ""}
+                tag_stamp = BASE_DIR / "BUILD_TAG"
+                tag = tag_stamp.read_text().strip() if tag_stamp.exists() else ""
+                return {"commit": c[:7], "commit_count": "0", "tag": tag}
         return {}
 
     try:
@@ -120,7 +122,8 @@ def get_version_info() -> dict[str, Any]:
     elif tag:
         base_version = tag.lstrip("v")
     else:
-        base_version = DEFAULT_VERSION
+        stamp = BASE_DIR / "BUILD_VERSION"
+        base_version = stamp.read_text().strip() if stamp.exists() else DEFAULT_VERSION
 
     # Build formatted dynamic string
     if tag:

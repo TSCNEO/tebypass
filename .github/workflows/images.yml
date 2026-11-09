@@ -1,0 +1,200 @@
+name: Container images
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: images-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    uses: ./.github/workflows/ci.yml
+
+  metadata:
+    needs: checks
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.info.outputs.image }}
+      version: ${{ steps.info.outputs.version }}
+      tag: ${{ steps.info.outputs.tag }}
+      revision: ${{ steps.info.outputs.revision }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: info
+        env:
+          REPOSITORY: ${{ github.repository }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          COMMIT: ${{ github.sha }}
+        run: |
+          python3 - <<'PY'
+          import os, re, tomllib
+          from pathlib import Path
+          version = tomllib.loads(Path('pyproject.toml').read_text())['project']['version']
+          tag = ''
+          if os.environ['REF_TYPE'] == 'tag':
+              tag = os.environ['REF_NAME']
+              if not re.fullmatch(r'v\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.\d+)?', tag):
+                  raise SystemExit('Use vX.Y.Z or vX.Y.Z-rc.N/alpha.N/beta.N')
+              if tag[1:].split('-')[0] != version:
+                  raise SystemExit('Release tag must match pyproject.toml version')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'image=ghcr.io/{os.environ["REPOSITORY"].lower()}\n')
+              output.write(f'version={tag[1:] if tag else version}\n')
+              output.write(f'tag={tag}\n')
+              output.write(f'revision=sha-{os.environ["COMMIT"][:12]}\n')
+          PY
+
+  publish:
+    needs: metadata
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: app
+            suffix: ''
+            file: Dockerfile
+          - name: gateway
+            suffix: '-gateway'
+            file: gateway/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ needs.metadata.outputs.image }}${{ matrix.suffix }}:${{ needs.metadata.outputs.revision }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ needs.metadata.outputs.version }}
+            org.opencontainers.image.licenses=AGPL-3.0-or-later
+          build-args: |
+            GIT_COMMIT=${{ github.sha }}
+            APP_VERSION=${{ needs.metadata.outputs.version }}
+            GIT_TAG=${{ needs.metadata.outputs.tag }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+          provenance: mode=max
+          sbom: true
+
+  verify-install:
+    needs: [metadata, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    env:
+      TEBYPASS_IMAGE_TAG: ${{ needs.metadata.outputs.revision }}
+      TEBYPASS_IMAGE_PREFIX: ${{ needs.metadata.outputs.image }}
+      EXPECTED_COMMIT: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify install without source builds
+        run: |
+          docker compose pull tebypass
+          docker compose --profile gateway pull tebypass-gateway
+          docker compose up -d --wait --wait-timeout 90 tebypass
+          python3 scripts/verify_container_install.py
+          docker run --rm --cap-add NET_ADMIN -e PYTHONPATH=/ --entrypoint python3 -v "$PWD/scripts/verify_gateway_network.py:/verify.py:ro" "ghcr.io/${GITHUB_REPOSITORY,,}-gateway:$TEBYPASS_IMAGE_TAG" /verify.py
+          python3 scripts/verify_gateway_forwarding.py --image "ghcr.io/${GITHUB_REPOSITORY,,}-gateway:$TEBYPASS_IMAGE_TAG"
+      - name: Clean installation
+        if: always()
+        run: docker compose down --volumes
+      - name: Prepare version-pinned installation bundle
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          RELEASE_VERSION: ${{ needs.metadata.outputs.version }}
+        run: python3 scripts/prepare_release.py "$RELEASE_VERSION" --output dist/release
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          name: install-${{ needs.metadata.outputs.version }}
+          path: dist/release/
+          if-no-files-found: error
+
+  promote:
+    needs: [metadata, verify-install]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        suffix: ['', '-gateway']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        id: tags
+        with:
+          images: ${{ needs.metadata.outputs.image }}${{ matrix.suffix }}
+          flavor: latest=false
+          tags: |
+            type=raw,value=edge,enable=${{ github.ref == 'refs/heads/main' }}
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-') }}
+      - name: Promote verified images to version/channel tags
+        env:
+          IMAGE_TAGS: ${{ steps.tags.outputs.tags }}
+          SOURCE: ${{ needs.metadata.outputs.image }}${{ matrix.suffix }}:${{ needs.metadata.outputs.revision }}
+        run: |
+          args=()
+          while IFS= read -r tag; do
+            if [ -n "$tag" ]; then args+=(--tag "$tag"); fi
+          done <<< "$IMAGE_TAGS"
+          docker buildx imagetools create "${args[@]}" "$SOURCE"
+
+  release-draft:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [metadata, promote]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare release assets
+        env:
+          RELEASE_VERSION: ${{ needs.metadata.outputs.version }}
+        run: python3 scripts/prepare_release.py "$RELEASE_VERSION" --output dist/release
+      - name: Attach installation bundle to a draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.metadata.outputs.tag }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" dist/release/* dist/release/.env.example --clobber
+          else
+            gh release create "$RELEASE_TAG" dist/release/* dist/release/.env.example --verify-tag --draft --title "TeByPass $RELEASE_TAG" --notes-file docs/RELEASE_NOTES.md
+          fi

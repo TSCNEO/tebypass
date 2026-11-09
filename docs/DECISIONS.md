@@ -331,3 +331,17 @@ Las cookies anteriores siguen con su validación previa y se renuevan iniciando 
 El asistente de ADR-015 queda opcional para metadatos reenviados de conexión de Uvicorn.
 La aplicación no obtiene acceso al socket Docker. Protección de origen basada en
 [OWASP CSRF Prevention](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html).
+
+## ADR-017: Distribución mediante imágenes verificadas de GHCR
+
+**Aceptado.** El Compose de instalación referencia imágenes, no contiene build. Un override
+explícito conserva el desarrollo desde código. App y sidecar se publican juntos para
+amd64/arm64 tras CI; se descargan y prueban por SHA antes de promover edge/version/latest.
+La prueba de ejecución en GitHub es amd64. Las imágenes registran revisión y versión;
+no necesitan Git en runtime. SBOM y procedencia acompañan a los manifiestos.
+
+Un tag genera Compose fijado a la versión y borrador de release con assets/checksums.
+No se crea ningún tag ni se cambia visibilidad como efecto de un push normal a main.
+La visibilidad pública del código y de cada paquete, y el pull anónimo, son requisitos
+previos a anunciar una instalación abierta. Gateway sigue necesitando topología macvlan:
+el empaquetado elimina compilación, no puede inventar parámetros de la LAN.

@@ -37,11 +37,22 @@ incluye todos los formatos legacy de stopliga. El gateway y MikroTik del MVP son
 
 ## Arranque
 
+Requiere Docker Engine y Docker Compose v2. Las imágenes incluyen el panel y sus
+assets; no necesitas Git, Python ni compilar en el servidor.
+
+Cuando se publique la primera release, descarga su `docker-compose.yml` adjunto y ejecuta:
+
 ```sh
-git clone https://github.com/TSCNEO/tebypass
+mkdir tebypass
 cd tebypass
-docker compose up -d --build
+curl -fLO https://github.com/TSCNEO/tebypass/releases/latest/download/docker-compose.yml
+docker compose up -d --wait
 ```
+
+El Compose de cada release fija sus imágenes a esa versión. Mientras se prepara la
+primera publicación estable, `latest` todavía no existe; los builds verificados de
+`main` se publican como `edge`. El repositorio y los paquetes deben ser públicos para
+instalar sin autenticación. Consulta [publicación y estado](docs/RELEASING.md).
 
 Abre el puerto 9384 del host. La aplicación genera una clave de administración local:
 
@@ -96,6 +107,17 @@ extremo a extremo con cada destino.
 - [Alcance y criterios del MVP](docs/PROJECT.md)
 - [Fases y evidencias](docs/PHASES.md), [roadmap](docs/ROADMAP.md), [decisiones](docs/DECISIONS.md)
 
+Para compilar tu checkout durante desarrollo, usa el override explícito:
+
+```sh
+git clone https://github.com/TSCNEO/tebypass
+cd tebypass
+TEBYPASS_GIT_COMMIT=$(git rev-parse HEAD) docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+```
+
+El Compose normal solo descarga imágenes GHCR. Añade `--profile gateway` cuando necesites
+el sidecar y hayas preparado macvlan.
+
 ```sh
 uv sync --frozen --extra dev
 uv run ruff check .
@@ -119,6 +141,6 @@ en el kernel de macOS/Windows.
 
 ## Créditos y licencia
 
-Gracias a [jcastro/stopliga](https://github.com/jcastro/stopliga) por la idea y a la comunidad **HayAHora** por mantener las listas abiertas.
+Gracias a [jcastro/stopliga](https://github.com/jcastro/stopliga) por la idea y a la comunidad [hayahora.futbol](https://hayahora.futbol) por mantener las listas abiertas.
 [Dependencias y atribuciones](THIRD_PARTY_NOTICES.md). TeByPass: AGPL-3.0-or-later.
 El uso debe respetar la legislación y las condiciones de los servicios de red aplicables.

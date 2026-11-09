@@ -7,7 +7,9 @@ del proxy ni pegar contraseñas en el chat. No añadir datos del entorno a Git.
 ## Acceso web y reverse proxy
 
 1. Inspeccionar checkout y estado de Compose. Conservar volúmenes y configuración
-   existentes. Actualizar y construir la imagen según OPERATIONS.md.
+   existentes. En instalación de release, descargar el Compose adjunto y ejecutar
+   pull/up según OPERATIONS.md; no clonar ni compilar. Solo para desarrollo se usa
+   docker-compose.build.yml junto al Compose base.
 2. Si se usa un proxy, comprobar que apunta al puerto interno 9384 y conserva Host.
    Configurar certificado y ruta en el proxy si forman parte del despliegue autorizado.
 3. Abrir el panel e iniciar sesión normalmente. El formulario reconoce la URL pública

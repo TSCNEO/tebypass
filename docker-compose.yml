@@ -1,10 +1,6 @@
 services:
   tebypass:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        GIT_COMMIT: ${TEBYPASS_GIT_COMMIT:-unknown}
+    image: ${TEBYPASS_IMAGE_PREFIX:-ghcr.io/tscneo/tebypass}:${TEBYPASS_IMAGE_TAG:-latest}
     container_name: tebypass
     restart: unless-stopped
     ports:
@@ -38,9 +34,7 @@ services:
   # TEBYPASS_GATEWAY_IP must be a free address of that subnet. The defaults below are
   # documentation placeholders (RFC 5737); set the real values in .env.
   tebypass-gateway:
-    build:
-      context: .
-      dockerfile: gateway/Dockerfile
+    image: ${TEBYPASS_IMAGE_PREFIX:-ghcr.io/tscneo/tebypass}-gateway:${TEBYPASS_IMAGE_TAG:-latest}
     container_name: tebypass-gateway
     restart: unless-stopped
     cap_add:

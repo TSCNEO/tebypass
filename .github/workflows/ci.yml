@@ -1,10 +1,12 @@
 name: CI
 
 on:
-  push:
-    branches: [ "main" ]
+  workflow_call:
   pull_request:
     branches: [ "main" ]
+
+permissions:
+  contents: read
 
 jobs:
   lint-and-test:

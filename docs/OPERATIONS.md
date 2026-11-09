@@ -62,7 +62,7 @@ y ponle una nota “TeByPass-Gateway”.** La MAC es determinista para mantener 
 4. Arranca el perfil y selecciona Gateway virtual en Ajustes:
 
 ```sh
-docker compose --profile gateway up -d --build
+docker compose --profile gateway up -d --wait
 ```
 
 5. Sube `wg0.conf` desde la web. El controlador valida, configura `Table=off`, elimina
@@ -99,22 +99,35 @@ El túnel necesita AllowedIPs compatibles con los destinos seleccionados.
 
 ## Actualizar y revertir
 
-Guarda backup consistente y etiqueta la imagen anterior antes de actualizar. Comprueba
-que el checkout no tenga modificaciones locales, luego:
+Las instalaciones de release fijan una versión de imagen en su Compose. Guarda backup
+consistente de BD/secretos y conserva la versión anterior antes de actualizar. Descarga
+el Compose de la nueva release, revisa cambios y después:
+
+```sh
+docker compose pull
+docker compose up -d --wait
+```
+
+Si utilizas el sidecar, añade `--profile gateway` a ambos comandos. También puedes
+seleccionar una versión de ambas imágenes en `.env`, por ejemplo `TEBYPASS_IMAGE_TAG=0.2.0`.
+`latest` solo se promueve con tags estables; `edge` sigue main y no es un canal estable.
+Un tag `sha-<12 caracteres>` permite identificar exactamente un build. Las imágenes
+son Linux amd64/arm64. El gateway requiere kernel Linux con nftables y WireGuard.
+
+Para rollback recupera el Compose/valor de versión anterior y repite pull/up. No elimines
+los volúmenes. Las migraciones del MVP son aditivas; restaurar un backup de BD requiere
+detener ambos servicios y mantener su clave correspondiente. No resetees reglas ajenas.
+
+En despliegues que compilan el código, usa siempre ambos archivos:
 
 ```sh
 git pull --ff-only
-TEBYPASS_GIT_COMMIT=$(git rev-parse HEAD) docker compose up -d --build
+TEBYPASS_GIT_COMMIT=$(git rev-parse HEAD) docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 ```
 
-Si utilizas el sidecar, añade `--profile gateway`. Verifica liveness, acceso, versión del
-build, estado detallado y sincronización; un `git pull` sin build ya no cambia la versión
-anunciada. El puerto interno es fijo 9384; `.env` cambia el puerto publicado.
-
-Para rollback usa la imagen guardada con un override Compose de `image` y evita construir
-encima de ella. Las migraciones del MVP son aditivas y compatibles con la entrega previa;
-restaurar un backup de BD debe hacerse con ambos servicios detenidos. Mantén siempre su
-clave correspondiente. No hagas reset de reglas ajenas como parte de una reversión.
+El override genera `tebypass:local` y `tebypass-gateway:local`, sin publicar ni descargar
+imágenes de release. Comprueba versión del build, login, guardado, salud del driver y
+sincronización después de cada actualización. El puerto interno permanece en 9384.
 
 ## Verificación Linux aislada
 

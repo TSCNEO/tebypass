@@ -14,6 +14,8 @@ RUN apk add --no-cache \
     tzdata \
     curl
 
+COPY LICENSE THIRD_PARTY_NOTICES.md /usr/share/doc/tebypass/
+
 COPY gateway/entrypoint.sh /entrypoint.sh
 COPY gateway/controller.py /controller.py
 COPY gateway/wireguard_runtime.py /wireguard_runtime.py

@@ -1,5 +1,7 @@
 """Smoke and unit verification suite for TeByPass core components."""
 
+from pathlib import Path
+
 import pytest
 
 from app.core.cache import SlidingWindowCache
@@ -96,3 +98,20 @@ def test_dynamic_version_info() -> None:
     ver_str = get_version_string()
     assert len(ver_str) > 0
     assert ver_str.startswith("v")
+
+
+def test_image_reports_embedded_release_version(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.core import version
+
+    monkeypatch.setattr(version, "BASE_DIR", tmp_path)
+    monkeypatch.delenv("TEBYPASS_VERSION", raising=False)
+    monkeypatch.delenv("TEBYPASS_GIT_COMMIT", raising=False)
+    (tmp_path / "BUILD_COMMIT").write_text("1234567890abcdef")
+    (tmp_path / "BUILD_VERSION").write_text("0.2.0-rc.1")
+    (tmp_path / "BUILD_TAG").write_text("v0.2.0-rc.1")
+    info = version.get_version_info()
+    assert info["base_version"] == "0.2.0-rc.1"
+    assert info["display_version"] == "v0.2.0-rc.1"
+    assert info["commit"] == "1234567"

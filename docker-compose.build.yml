@@ -1,0 +1,16 @@
+# Development only: add -f docker-compose.yml -f docker-compose.build.yml.
+services:
+  tebypass:
+    image: tebypass:local
+    pull_policy: never
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        GIT_COMMIT: ${TEBYPASS_GIT_COMMIT:-unknown}
+  tebypass-gateway:
+    image: tebypass-gateway:local
+    pull_policy: never
+    build:
+      context: .
+      dockerfile: gateway/Dockerfile
