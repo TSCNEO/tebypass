@@ -5,6 +5,7 @@ from pathlib import Path
 
 from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import (
+    AsyncConnection,
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
@@ -60,11 +61,33 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 
 
+async def _apply_lightweight_migrations(conn: AsyncConnection) -> None:
+    """Add newly introduced columns to pre-existing SQLite tables.
+
+    ``Base.metadata.create_all`` only creates missing tables, so databases created by
+    earlier releases need explicit ``ALTER TABLE`` statements for new columns.
+    """
+    result = await conn.execute(text("PRAGMA table_info(targets)"))
+    target_columns = {row[1] for row in result.fetchall()}
+    if target_columns and "folder_id" not in target_columns:
+        await conn.execute(
+            text(
+                "ALTER TABLE targets ADD COLUMN folder_id VARCHAR(36) "
+                "REFERENCES folders(id) ON DELETE SET NULL"
+            )
+        )
+
+
 async def init_db() -> None:
-    """Initialize database tables and verify WAL mode."""
+    """Initialize database tables, apply schema upgrades and load persisted settings."""
+    from app.core.settings_store import load_into_settings
     from app.db.models import Base
 
     async with engine.begin() as conn:
         await conn.execute(text("PRAGMA journal_mode=WAL;"))
         await conn.execute(text("PRAGMA synchronous=NORMAL;"))
         await conn.run_sync(Base.metadata.create_all)
+        await _apply_lightweight_migrations(conn)
+
+    # Apply previously persisted runtime settings over the environment defaults
+    await load_into_settings()

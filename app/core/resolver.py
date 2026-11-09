@@ -6,6 +6,7 @@ import logging
 import socket
 
 from app.core.cache import CachedResolution, SlidingWindowCache
+from app.core.config import settings
 
 logger = logging.getLogger("tebypass.resolver")
 
@@ -25,13 +26,14 @@ class NativeDNSResolver:
         """Resolve an FQDN to IP addresses using the host's native resolver."""
         clean_fqdn = fqdn.strip().lower()
         loop = asyncio.get_running_loop()
+        family = socket.AF_UNSPEC if settings.resolve_ipv6 else socket.AF_INET
 
         try:
             # Delegate to system getaddrinfo via default executor (non-blocking)
             addr_info = await loop.getaddrinfo(
                 clean_fqdn,
                 None,
-                family=socket.AF_UNSPEC,
+                family=family,
                 type=socket.SOCK_STREAM,
             )
         except socket.gaierror as ex:
@@ -52,6 +54,8 @@ class NativeDNSResolver:
         for ip_str in resolved_ips:
             try:
                 ip_obj = ipaddress.ip_address(ip_str)
+                if not settings.resolve_ipv6 and ip_obj.version == 6:
+                    continue
                 cidr = f"{ip_str}/32" if ip_obj.version == 4 else f"{ip_str}/128"
 
                 cached = await self.cache.add_or_extend(

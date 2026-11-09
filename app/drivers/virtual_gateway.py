@@ -31,13 +31,20 @@ class VirtualGatewayDriver(BaseRouterDriver):
         """Verify presence of nft binary or socket communication."""
         self._nft_path = shutil.which("nft")
 
+    def _nft_binary(self) -> str | None:
+        """Resolve the nft binary lazily so a hot-reloaded driver is still usable."""
+        if self._nft_path is None:
+            self._nft_path = shutil.which("nft")
+        return self._nft_path
+
     async def get_current_routes(self) -> set[str]:
         """Query elements in the nftables set."""
-        if not self._nft_path:
+        nft_path = self._nft_binary()
+        if not nft_path:
             return set(self._cached_routes)
 
         try:
-            cmd = [self._nft_path, "list", "set", "inet", "tebypass", self.set_name]
+            cmd = [nft_path, "list", "set", "inet", "tebypass", self.set_name]
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
@@ -83,7 +90,8 @@ class VirtualGatewayDriver(BaseRouterDriver):
         added_count = 0
         removed_count = 0
 
-        if self._nft_path:
+        nft_path = self._nft_binary()
+        if nft_path:
             # Batch updates via nft -f
             commands: list[str] = []
             for item in to_add:
@@ -95,7 +103,7 @@ class VirtualGatewayDriver(BaseRouterDriver):
                 script = "\n".join(commands) + "\n"
                 try:
                     proc = await asyncio.create_subprocess_exec(
-                        self._nft_path,
+                        nft_path,
                         "-f",
                         "-",
                         stdin=asyncio.subprocess.PIPE,
@@ -148,13 +156,13 @@ class VirtualGatewayDriver(BaseRouterDriver):
 
     async def health_check(self) -> DriverStatus:
         """Inspect health of the virtual gateway driver."""
-        has_nft = self._nft_path is not None
+        nft_path = self._nft_binary()
         details: dict[str, Any] = {
-            "nft_available": has_nft,
+            "nft_available": nft_path is not None,
             "set_name": self.set_name,
-            "binary_path": self._nft_path or "none",
+            "binary_path": nft_path or "none",
         }
-        health = DriverHealth.HEALTHY if has_nft else DriverHealth.DEGRADED
+        health = DriverHealth.HEALTHY if nft_path else DriverHealth.DEGRADED
         return DriverStatus(
             driver_name=self.driver_name,
             health=health,

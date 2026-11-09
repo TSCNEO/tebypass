@@ -3,13 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TeByPass // L3 Split-Routing Engine</title>
+  <meta name="color-scheme" content="dark">
+  <title>TeByPass // Panel de control</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.3/dist/cdn.min.js"></script>
   <style>
     :root {
       --bg-charcoal: #0d0f12;
       --bg-graphite: #16191f;
+      --bg-panel: #1a1e26;
       --border-edge: #262b35;
       --amber-glow: #f59e0b;
       --telemetry-green: #10b981;
@@ -20,152 +22,807 @@
       color: #e2e8f0;
       font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     }
-    .mono {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .panel { background-color: var(--bg-graphite); border: 1px solid var(--border-edge); }
+    .panel-inner { background-color: var(--bg-panel); }
+    .edge { border-color: var(--border-edge); }
+    .hatch { background-image: repeating-linear-gradient(45deg, rgba(245,158,11,.06) 0 6px, transparent 6px 12px); }
+    [x-cloak] { display: none !important; }
+    .switch { position: relative; width: 44px; height: 24px; border-radius: 999px; background: #2c333f; transition: background .18s ease; flex: none; }
+    .switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 999px; background: #8b96a5; transition: transform .18s ease, background .18s ease; }
+    .switch.on { background: rgba(16,185,129,.28); }
+    .switch.on::after { transform: translateX(20px); background: var(--telemetry-green); }
+    .switch.big { width: 62px; height: 34px; }
+    .switch.big::after { width: 26px; height: 26px; top: 4px; left: 4px; }
+    .switch.big.on::after { transform: translateX(28px); }
+    .btn { border: 1px solid var(--border-edge); transition: border-color .15s ease, background .15s ease, color .15s ease; }
+    .btn:hover { border-color: #3a4250; }
+    .btn-primary { background: rgba(245,158,11,.12); border-color: rgba(245,158,11,.45); color: #fbbf24; }
+    .btn-primary:hover { background: rgba(245,158,11,.2); }
+    .btn-ghost { color: #9aa5b4; }
+    .btn-ghost:hover { color: #e2e8f0; background: #1e232c; }
+    .btn-danger:hover { border-color: rgba(239,68,68,.6); color: #fca5a5; }
+    input, select, textarea {
+      background: #12151b; border: 1px solid var(--border-edge); color: #e2e8f0;
+      border-radius: 6px; padding: 8px 10px; width: 100%; font-size: 14px;
     }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: rgba(245,158,11,.6); }
+    label.field { display: block; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #7b8695; margin-bottom: 6px; }
+    .chip { border: 1px solid var(--border-edge); border-radius: 999px; padding: 5px 12px; font-size: 12px; color: #9aa5b4; transition: all .15s; }
+    .chip:hover { color: #e2e8f0; border-color: #3a4250; }
+    .chip.active { background: #1e232c; color: #fbbf24; border-color: rgba(245,158,11,.5); }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-thumb { background: #2c333f; border-radius: 4px; }
+    .dot { width: 7px; height: 7px; border-radius: 999px; display: inline-block; }
   </style>
 </head>
-<body class="min-h-screen flex flex-col">
-  <!-- Top Navigation Header -->
-  <header class="border-b border-[#262b35] bg-[#16191f] px-6 py-4 flex items-center justify-between">
-    <div class="flex items-center space-x-3">
-      <div class="w-3 h-3 rounded-full bg-[#f59e0b] shadow-[0_0_8px_#f59e0b]"></div>
-      <h1 class="text-lg font-bold tracking-wider uppercase text-slate-100">TeByPass</h1>
-      <span class="text-xs bg-[#262b35] text-amber-400 px-2 py-0.5 rounded mono">L3 SPLIT ROUTING</span>
-    </div>
-    <div class="flex items-center space-x-6 mono text-xs">
-      <div class="flex items-center space-x-2">
-        <span class="text-slate-500">VER:</span>
-        <span class="text-amber-400 font-semibold" x-text="status.version || '{{ version }}'">{{ version }}</span>
+<body x-data="tebypass()" x-init="boot()" x-cloak class="min-h-screen">
+
+  <!-- ===================== HEADER ===================== -->
+  <header class="sticky top-0 z-30 border-b edge" style="background: rgba(13,15,18,.92); backdrop-filter: blur(8px);">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-4 flex-wrap">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 panel-inner rounded-md flex items-center justify-center border edge">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 7h9a3 3 0 1 0-3-3"/><path d="M4 12h13a3 3 0 1 1-3 3"/><path d="M4 17h6"/>
+          </svg>
+        </div>
+        <div>
+          <div class="mono text-sm font-semibold tracking-widest text-slate-100">TEBYPASS</div>
+          <div class="mono text-[10px] text-slate-500 tracking-wider" x-text="ver"></div>
+        </div>
       </div>
-      <div class="flex items-center space-x-2">
-        <span class="text-slate-500">PORT:</span>
-        <span class="text-slate-300">9384</span>
+
+      <div class="flex items-center gap-2 px-3 py-1.5 panel-inner rounded-md border edge">
+        <span class="dot" :style="'background:' + (state.status === 'healthy' ? 'var(--telemetry-green)' : 'var(--alarm-red)')"></span>
+        <span class="mono text-[11px] text-slate-400 uppercase tracking-wider" x-text="driverLabel()"></span>
       </div>
-      <div class="flex items-center space-x-2">
-        <span class="text-slate-500">ROUTER:</span>
-        <span class="text-[#10b981] font-semibold uppercase">{{ driver_name }}</span>
+
+      <div class="hidden md:flex items-center gap-5 mono text-[11px] text-slate-500">
+        <span>OBJETIVOS <b class="text-slate-200" x-text="stats.total_targets"></b></span>
+        <span>IPs ENRUTADAS <b class="text-slate-200" x-text="stats.active_routes"></b></span>
+        <span>ÚLT. SYNC <b class="text-slate-200" x-text="lastSyncLabel()"></b></span>
       </div>
-      <div class="flex items-center space-x-2">
-        <span class="text-slate-500">STATUS:</span>
-        <span class="text-[#10b981] font-semibold">ONLINE</span>
+
+      <div class="ml-auto flex items-center gap-2">
+        <button class="btn btn-ghost px-3 py-2 rounded-md text-xs mono uppercase tracking-wider" @click="syncNow()" :disabled="busy.sync">
+          <span x-show="!busy.sync">Sincronizar ahora</span>
+          <span x-show="busy.sync">Sincronizando…</span>
+        </button>
+        <button class="btn btn-primary px-3 py-2 rounded-md text-xs mono uppercase tracking-wider" @click="openSettings()">
+          Ajustes
+        </button>
       </div>
     </div>
   </header>
 
-  <!-- Main Content Dashboard -->
-  <main class="flex-1 p-6 max-w-7xl w-full mx-auto space-y-6" x-data="dashboard()">
-    <!-- Telemetry Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-      <div class="bg-[#16191f] border border-[#262b35] p-5 rounded-lg">
-        <div class="text-xs text-slate-400 uppercase tracking-wider mb-1">Rutas L3 Inyectadas</div>
-        <div class="text-3xl font-bold mono text-[#10b981]" x-text="status.active_routes || 0">0</div>
-        <div class="text-xs text-slate-500 mt-2 mono">Prefijos CIDR activos</div>
-      </div>
-      <div class="bg-[#16191f] border border-[#262b35] p-5 rounded-lg">
-        <div class="text-xs text-slate-400 uppercase tracking-wider mb-1">Objetivos Configurados</div>
-        <div class="text-3xl font-bold mono text-slate-200" x-text="status.total_targets || 0">0</div>
-        <div class="text-xs text-slate-500 mt-2 mono">FQDNs y CIDRs</div>
-      </div>
-      <div class="bg-[#16191f] border border-[#262b35] p-5 rounded-lg">
-        <div class="text-xs text-slate-400 uppercase tracking-wider mb-1">IPs Dinámicas Resueltas</div>
-        <div class="text-3xl font-bold mono text-amber-400" x-text="status.total_resolved_ips || 0">0</div>
-        <div class="text-xs text-slate-500 mt-2 mono">En ventana deslizante</div>
-      </div>
-      <div class="bg-[#16191f] border border-[#262b35] p-5 rounded-lg">
-        <div class="text-xs text-slate-400 uppercase tracking-wider mb-1">Ventana Deslizante</div>
-        <div class="text-3xl font-bold mono text-slate-200"><span x-text="status.sliding_window_seconds || 3600">3600</span>s</div>
-        <div class="text-xs text-slate-500 mt-2 mono">TTL dinámico extendido</div>
-      </div>
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+
+    <div x-show="!settingsLoaded" class="panel rounded-lg p-4 text-sm text-amber-300 border-amber-700/40 hatch">
+      Cargando configuración…
     </div>
 
-    <!-- Actions & Quick Controls -->
-    <div class="bg-[#16191f] border border-[#262b35] p-6 rounded-lg flex flex-col md:flex-row items-center justify-between gap-4">
-      <div>
-        <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-200">Reconciliación de Rutas</h2>
-        <p class="text-xs text-slate-400 mt-1">Sincroniza el estado de objetivos y resuelve dominios contra el router configurado.</p>
+    <!-- ===================== FEED COMUNITARIO ===================== -->
+    <section class="panel rounded-lg overflow-hidden">
+      <div class="px-5 py-4 border-b edge flex items-start gap-4 flex-wrap">
+        <div class="flex items-start gap-4 flex-1 min-w-[260px]">
+          <button class="switch big mt-1" :class="feed && feed.enabled ? 'on' : ''" @click="toggleFeed()" :disabled="!feed || busy.feed"></button>
+          <div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <h2 class="text-base font-semibold text-slate-100">Bloqueo de LaLiga (lista comunitaria)</h2>
+              <span class="mono text-[10px] px-2 py-0.5 rounded border"
+                    :class="feed && feed.enabled ? 'text-emerald-400 border-emerald-700/50' : 'text-slate-500 border-slate-700'"
+                    x-text="feed && feed.enabled ? 'ACTIVADA' : 'DESACTIVADA'"></span>
+            </div>
+            <p class="text-sm text-slate-400 mt-1 max-w-2xl">
+              Cuando el operador bloquea las webs de fútbol, esta lista las detecta sola y manda
+              solo esas IPs por la VPN. El resto de tu internet sigue saliendo por tu fibra normal.
+            </p>
+            <div class="mt-2 flex items-center gap-4 flex-wrap mono text-[11px] text-slate-500">
+              <span>IPs en lista: <b class="text-slate-300" x-text="feed ? feed.targets_count : '—'"></b></span>
+              <span>Última descarga: <b class="text-slate-300" x-text="feed && feed.last_fetched_at ? fmtDate(feed.last_fetched_at) : 'nunca'"></b></span>
+              <span>Filtro operador: <b class="text-slate-300" x-text="settings.feed_isp_filter || 'todos'"></b></span>
+            </div>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button class="btn btn-ghost px-3 py-2 rounded-md text-xs mono uppercase tracking-wider" @click="fetchFeed()" :disabled="!feed || busy.feed">
+            <span x-show="!busy.feed">Actualizar lista</span>
+            <span x-show="busy.feed">Descargando…</span>
+          </button>
+        </div>
       </div>
-      <div class="flex items-center space-x-3">
-        <button
-          @click="triggerSync()"
-          :disabled="isSyncing"
-          class="px-4 py-2 bg-[#f59e0b] hover:bg-amber-500 text-slate-950 font-semibold text-xs tracking-wider uppercase rounded shadow transition disabled:opacity-50">
-          <span x-show="!isSyncing">Sincronizar Ahora</span>
-          <span x-show="isSyncing">Sincronizando...</span>
+      <div class="px-5 py-3 text-[12px] text-slate-500 flex items-start gap-2">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mt-0.5 flex-none"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+        <span>Si el feed dice que no hay bloqueo activo, esta lista no enruta nada: no malgasta tu VPN.
+        Con <b class="text-slate-400">Mantener siempre</b> activado en Ajustes, enruta la lista completa aunque no haya bloqueo.</span>
+      </div>
+    </section>
+
+    <!-- ===================== LISTAS PERSONALES ===================== -->
+    <section class="panel rounded-lg overflow-hidden">
+      <div class="px-5 py-3 border-b edge flex items-center gap-3 flex-wrap">
+        <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wider mono">Tus listas</h2>
+        <span class="text-xs text-slate-500">Agrupa tus propios dominios como quieras</span>
+        <button class="ml-auto btn btn-ghost px-3 py-1.5 rounded-md text-xs mono uppercase tracking-wider" @click="showFolderModal = true">
+          + Nueva lista
+        </button>
+      </div>
+      <div class="px-5 py-4 flex items-center gap-2 flex-wrap">
+        <button class="chip" :class="activeFolder === null ? 'active' : ''" @click="activeFolder = null">
+          Todas <span class="text-slate-500" x-text="'(' + targets.length + ')'"></span>
+        </button>
+        <template x-for="f in folders" :key="f.id">
+          <div class="flex items-center">
+            <button class="chip flex items-center gap-2" :class="activeFolder === f.id ? 'active' : ''" @click="activeFolder = f.id">
+              <span class="dot" :style="'background:' + f.color"></span>
+              <span x-text="f.name"></span>
+              <span class="text-slate-500" x-text="'(' + f.targets_count + ')'"></span>
+            </button>
+            <button class="ml-1 text-slate-600 hover:text-red-400 text-xs px-1" @click="deleteFolder(f)" title="Eliminar lista">✕</button>
+          </div>
+        </template>
+        <div x-show="folders.length === 0" class="text-xs text-slate-600 italic">
+          Sin listas todavía. Crea una para separar tus dominios por temas.
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== OBJETIVOS ===================== -->
+    <section class="panel rounded-lg overflow-hidden">
+      <div class="px-5 py-3 border-b edge flex items-center gap-3 flex-wrap">
+        <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wider mono">Dominios e IPs que van por la VPN</h2>
+        <div class="ml-auto flex items-center gap-2 flex-wrap">
+          <input type="search" placeholder="Buscar…" class="!w-44 !py-1.5 !text-xs" x-model="search">
+          <button class="btn btn-ghost px-3 py-1.5 rounded-md text-xs mono uppercase tracking-wider" @click="showBulkModal = true">
+            Importar varios
+          </button>
+          <button class="btn btn-primary px-3 py-1.5 rounded-md text-xs mono uppercase tracking-wider" @click="openTargetModal()">
+            + Añadir
+          </button>
+        </div>
+      </div>
+
+      <div x-show="filteredTargets().length === 0" class="px-5 py-12 text-center">
+        <p class="text-slate-400 text-sm">Aquí no hay nada todavía.</p>
+        <p class="text-slate-600 text-xs mt-1">Añade un dominio (ej. <span class="mono">mi-servicio.example.org</span>) y TeByPass resolverá sus IPs con tu DNS y las mandará por la VPN.</p>
+      </div>
+
+      <div x-show="filteredTargets().length > 0" class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="mono text-[10px] uppercase tracking-wider text-slate-500 border-b edge">
+              <th class="text-left px-5 py-2 font-normal">Destino</th>
+              <th class="text-left px-3 py-2 font-normal">Lista</th>
+              <th class="text-left px-3 py-2 font-normal">IPs resueltas</th>
+              <th class="text-left px-3 py-2 font-normal">Nota</th>
+              <th class="text-center px-3 py-2 font-normal">Activo</th>
+              <th class="text-right px-5 py-2 font-normal">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="t in filteredTargets()" :key="t.id">
+              <tr class="border-b edge hover:bg-white/[.02] transition-colors">
+                <td class="px-5 py-3">
+                  <div class="mono text-slate-200 text-[13px]" x-text="t.value"></div>
+                  <div class="mono text-[10px] text-slate-600" x-text="t.destination_type === 'cidr' ? 'IP / red fija' : 'dominio'"></div>
+                </td>
+                <td class="px-3 py-3">
+                  <template x-if="t.folder_name">
+                    <span class="text-xs px-2 py-0.5 rounded border edge text-slate-400" x-text="t.folder_name"></span>
+                  </template>
+                  <template x-if="!t.folder_name">
+                    <span class="text-xs text-slate-600">—</span>
+                  </template>
+                </td>
+                <td class="px-3 py-3">
+                  <div class="flex items-center gap-2">
+                    <span class="mono text-xs" :class="t.resolved_count > 0 ? 'text-emerald-400' : 'text-slate-600'"
+                          x-text="t.resolved_count > 0 ? t.resolved_count + ' IPs' : 'sin resolver'"></span>
+                    <button class="text-slate-600 hover:text-amber-400 text-[11px] mono" @click="resolveNow(t)" :disabled="busy.resolve === t.id" title="Resolver ahora">
+                      <span x-show="busy.resolve !== t.id">↻</span>
+                      <span x-show="busy.resolve === t.id">…</span>
+                    </button>
+                  </div>
+                  <div x-show="t.resolved_ips && t.resolved_ips.length" class="mono text-[10px] text-slate-600 truncate max-w-[220px]" :title="(t.resolved_ips || []).join(', ')" x-text="(t.resolved_ips || []).slice(0,3).join(', ')"></div>
+                </td>
+                <td class="px-3 py-3 text-xs text-slate-500 max-w-[200px] truncate" x-text="t.description || '—'"></td>
+                <td class="px-3 py-3 text-center">
+                  <button class="switch mx-auto" :class="t.enabled ? 'on' : ''" @click="toggleTarget(t)"></button>
+                </td>
+                <td class="px-5 py-3 text-right whitespace-nowrap">
+                  <button class="btn btn-ghost px-2 py-1 rounded text-[11px] mono" @click="openTargetModal(t)">Editar</button>
+                  <button class="btn btn-ghost btn-danger px-2 py-1 rounded text-[11px] mono" @click="deleteTarget(t)">Borrar</button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer class="text-center text-[11px] text-slate-600 py-4 space-y-1">
+      <div>TeByPass <span class="mono" x-text="ver"></span> · Enrutamiento selectivo: solo lo bloqueado va por la VPN.</div>
+      <div>Gracias a <strong class="text-slate-500">jcastro/stopliga</strong> y a la comunidad <strong class="text-slate-500">hayahora.futbol</strong> por mantener las listas abiertas.</div>
+    </footer>
+  </main>
+
+  <!-- ===================== MODAL: OBJETIVO ===================== -->
+  <div x-show="showTargetModal" class="fixed inset-0 z-50 flex items-center justify-center p-4" style="background: rgba(0,0,0,.65)">
+    <div class="panel rounded-lg w-full max-w-lg" @click.outside="showTargetModal = false">
+      <div class="px-5 py-3 border-b edge flex items-center">
+        <h3 class="text-sm font-semibold text-slate-200" x-text="targetForm.id ? 'Editar destino' : 'Añadir destino'"></h3>
+        <button class="ml-auto text-slate-500 hover:text-slate-200" @click="showTargetModal = false">✕</button>
+      </div>
+      <div class="p-5 space-y-4">
+        <div>
+          <label class="field">Dominio o IP</label>
+          <input x-model="targetForm.value" placeholder="mi-servicio.example.org  ·  198.51.100.0/24" class="mono">
+          <p class="text-[11px] text-slate-600 mt-1">Acepta dominios, IPs sueltas y rangos tipo <span class="mono">203.0.113.0/24</span>.</p>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="field">Lista</label>
+            <select x-model="targetForm.folder_id">
+              <option value="">Sin lista</option>
+              <template x-for="f in folders" :key="f.id">
+                <option :value="f.id" x-text="f.name"></option>
+              </template>
+            </select>
+          </div>
+          <div>
+            <label class="field">Activo</label>
+            <select x-model="targetForm.enabled">
+              <option :value="true">Sí, enrutar</option>
+              <option :value="false">No, pausado</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="field">Nota (opcional)</label>
+          <input x-model="targetForm.description" placeholder="Para qué es esto">
+        </div>
+        <p x-show="formError" class="text-xs text-red-400" x-text="formError"></p>
+      </div>
+      <div class="px-5 py-3 border-t edge flex justify-end gap-2">
+        <button class="btn btn-ghost px-3 py-2 rounded-md text-xs mono uppercase" @click="showTargetModal = false">Cancelar</button>
+        <button class="btn btn-primary px-3 py-2 rounded-md text-xs mono uppercase" @click="saveTarget()" :disabled="busy.save">
+          <span x-show="!busy.save">Guardar</span><span x-show="busy.save">Guardando…</span>
         </button>
       </div>
     </div>
+  </div>
 
-    <!-- Active Routes Grid -->
-    <div class="bg-[#16191f] border border-[#262b35] rounded-lg overflow-hidden">
-      <div class="px-6 py-4 border-b border-[#262b35] flex items-center justify-between">
-        <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-300">Rutas Activas en Router</h2>
-        <span class="text-xs mono text-slate-500" x-text="'Total: ' + activeRoutes.length"></span>
+  <!-- ===================== MODAL: IMPORTAR VARIOS ===================== -->
+  <div x-show="showBulkModal" class="fixed inset-0 z-50 flex items-center justify-center p-4" style="background: rgba(0,0,0,.65)">
+    <div class="panel rounded-lg w-full max-w-lg" @click.outside="showBulkModal = false">
+      <div class="px-5 py-3 border-b edge flex items-center">
+        <h3 class="text-sm font-semibold text-slate-200">Importar varios destinos</h3>
+        <button class="ml-auto text-slate-500 hover:text-slate-200" @click="showBulkModal = false">✕</button>
       </div>
-      <div class="p-6">
-        <template x-if="activeRoutes.length === 0">
-          <div class="text-center py-8 text-slate-500 mono text-xs">
-            Sin rutas activas inyectadas. Añade un objetivo o feed y sincroniza.
-          </div>
-        </template>
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mono text-xs">
-          <template x-for="route in activeRoutes" :key="route">
-            <div class="bg-[#0d0f12] border border-[#262b35] px-3 py-2 rounded text-[#10b981] flex items-center justify-between">
-              <span x-text="route"></span>
-              <span class="w-1.5 h-1.5 rounded-full bg-[#10b981]"></span>
-            </div>
-          </template>
+      <div class="p-5 space-y-4">
+        <div>
+          <label class="field">Un destino por línea</label>
+          <textarea rows="8" class="mono !text-xs" x-model="bulkForm.entries" placeholder="uno.example.org&#10;dos.example.net&#10;198.51.100.7"></textarea>
+        </div>
+        <div>
+          <label class="field">Asignar a lista</label>
+          <select x-model="bulkForm.folder_id">
+            <option value="">Sin lista</option>
+            <template x-for="f in folders" :key="f.id">
+              <option :value="f.id" x-text="f.name"></option>
+            </template>
+          </select>
         </div>
       </div>
+      <div class="px-5 py-3 border-t edge flex justify-end gap-2">
+        <button class="btn btn-ghost px-3 py-2 rounded-md text-xs mono uppercase" @click="showBulkModal = false">Cancelar</button>
+        <button class="btn btn-primary px-3 py-2 rounded-md text-xs mono uppercase" @click="saveBulk()" :disabled="busy.save">Importar</button>
+      </div>
     </div>
-  </main>
+  </div>
 
-  <!-- Footer Credits -->
-  <footer class="border-t border-[#262b35] bg-[#0d0f12] px-6 py-4 text-center mono text-xs text-slate-500">
-    TeByPass <span class="text-slate-400" x-text="status.version || '{{ version }}'">{{ version }}</span> &bull; Reconocimiento y agradecimiento a <strong class="text-slate-400">jcastro/stopliga</strong> y la comunidad <strong class="text-slate-400">hayahora.futbol</strong>.
-  </footer>
+  <!-- ===================== MODAL: LISTA ===================== -->
+  <div x-show="showFolderModal" class="fixed inset-0 z-50 flex items-center justify-center p-4" style="background: rgba(0,0,0,.65)">
+    <div class="panel rounded-lg w-full max-w-sm" @click.outside="showFolderModal = false">
+      <div class="px-5 py-3 border-b edge flex items-center">
+        <h3 class="text-sm font-semibold text-slate-200">Nueva lista</h3>
+        <button class="ml-auto text-slate-500 hover:text-slate-200" @click="showFolderModal = false">✕</button>
+      </div>
+      <div class="p-5 space-y-4">
+        <div>
+          <label class="field">Nombre</label>
+          <input x-model="folderForm.name" placeholder="Streaming, Debrid, Trabajo…">
+        </div>
+        <div>
+          <label class="field">Color</label>
+          <select x-model="folderForm.color">
+            <option value="#f59e0b">Ámbar</option>
+            <option value="#10b981">Verde</option>
+            <option value="#38bdf8">Azul</option>
+            <option value="#f472b6">Rosa</option>
+            <option value="#a78bfa">Violeta</option>
+          </select>
+        </div>
+      </div>
+      <div class="px-5 py-3 border-t edge flex justify-end gap-2">
+        <button class="btn btn-ghost px-3 py-2 rounded-md text-xs mono uppercase" @click="showFolderModal = false">Cancelar</button>
+        <button class="btn btn-primary px-3 py-2 rounded-md text-xs mono uppercase" @click="saveFolder()">Crear</button>
+      </div>
+    </div>
+  </div>
 
-  <script>
-    function dashboard() {
-      return {
-        status: {},
-        activeRoutes: [],
-        isSyncing: false,
-        async init() {
-          await this.loadData();
-          setInterval(() => this.loadData(), 10000);
-        },
-        async loadData() {
-          try {
-            const statusRes = await fetch('/api/v1/status');
-            if (statusRes.ok) {
-              this.status = await statusRes.json();
-            }
-            const routesRes = await fetch('/api/v1/routes/active');
-            if (routesRes.ok) {
-              this.activeRoutes = await routesRes.json();
-            }
-          } catch (e) {
-            console.error('Error fetching dashboard telemetry', e);
-          }
-        },
-        async triggerSync() {
-          this.isSyncing = true;
-          try {
-            const res = await fetch('/api/v1/sync', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ force: false })
-            });
-            await this.loadData();
-          } catch (e) {
-            console.error('Error during sync', e);
-          } finally {
-            this.isSyncing = false;
-          }
-        }
+  <!-- ===================== MODAL: AJUSTES ===================== -->
+  <div x-show="showSettings" class="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto" style="background: rgba(0,0,0,.7)">
+    <div class="panel rounded-lg w-full max-w-2xl my-8">
+      <div class="px-5 py-3 border-b edge flex items-center flex-wrap gap-2">
+        <h3 class="text-sm font-semibold text-slate-200">Ajustes</h3>
+        <div class="flex gap-1">
+          <template x-for="t in tabs" :key="t.id">
+            <button class="px-2.5 py-1 rounded text-[11px] mono uppercase tracking-wider"
+                    :class="tab === t.id ? 'text-amber-400 bg-white/5' : 'text-slate-500 hover:text-slate-300'"
+                    @click="tab = t.id" x-text="t.label"></button>
+          </template>
+        </div>
+        <button class="ml-auto text-slate-500 hover:text-slate-200" @click="showSettings = false">✕</button>
+      </div>
+
+      <div class="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+
+        <div x-show="tab === 'router'" class="space-y-4">
+          <div>
+            <label class="field">¿Cómo se aplican las rutas?</label>
+            <select x-model="settings.router_driver">
+              <option value="mock">Simulación (no toca nada) — para probar</option>
+              <option value="unifi">Router UniFi / UniFi OS</option>
+              <option value="mikrotik">Router MikroTik</option>
+              <option value="virtual_gateway">Gateway virtual propio (WireGuard + nftables)</option>
+            </select>
+            <p class="text-[11px] text-slate-600 mt-1">
+              UniFi y MikroTik crean una lista de IPs en el propio router. El gateway virtual se usa
+              cuando tu router es de la operadora y no puedes crear reglas.
+            </p>
+          </div>
+
+          <div x-show="settings.router_driver === 'unifi'" class="space-y-3 panel-inner rounded-md p-4 border edge">
+            <div>
+              <label class="field">URL del controlador UniFi</label>
+              <input x-model="settings.unifi_controller_url" placeholder="https://198.51.100.1" class="mono">
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="field">API Key</label>
+                <input type="password" x-model="settings.unifi_api_key" placeholder="Sin configurar">
+              </div>
+              <div>
+                <label class="field">Sitio</label>
+                <input x-model="settings.unifi_site" placeholder="default" class="mono">
+              </div>
+            </div>
+            <div>
+              <label class="field">Nombre del grupo de IPs</label>
+              <input x-model="settings.unifi_group_name" placeholder="TeByPass_Targets" class="mono">
+            </div>
+            <p class="text-[11px] text-slate-600">Si prefieres usuario y contraseña en vez de API Key, rellénalos aquí:</p>
+            <div class="grid grid-cols-2 gap-3">
+              <div><label class="field">Usuario</label><input x-model="settings.unifi_username" class="mono"></div>
+              <div><label class="field">Contraseña</label><input type="password" x-model="settings.unifi_password"></div>
+            </div>
+          </div>
+
+          <div x-show="settings.router_driver === 'mikrotik'" class="space-y-3 panel-inner rounded-md p-4 border edge">
+            <div><label class="field">URL de la API RouterOS</label><input x-model="settings.mikrotik_api_url" placeholder="https://198.51.100.1" class="mono"></div>
+            <div class="grid grid-cols-2 gap-3">
+              <div><label class="field">Usuario</label><input x-model="settings.mikrotik_username" class="mono"></div>
+              <div><label class="field">Contraseña</label><input type="password" x-model="settings.mikrotik_password"></div>
+            </div>
+            <div><label class="field">Nombre de la address-list</label><input x-model="settings.mikrotik_address_list" class="mono"></div>
+          </div>
+
+          <div class="flex items-center gap-3 flex-wrap">
+            <button class="btn btn-ghost px-3 py-2 rounded-md text-xs mono uppercase" @click="testRouter()" :disabled="busy.test">
+              <span x-show="!busy.test">Probar conexión</span><span x-show="busy.test">Probando…</span>
+            </button>
+            <span x-show="routerTest" class="text-xs mono" :class="routerTest && routerTest.healthy ? 'text-emerald-400' : 'text-red-400'"
+                  x-text="routerTest ? (routerTest.healthy ? 'Conexión correcta' : 'No se pudo conectar') : ''"></span>
+            <span x-show="routerTest && !routerTest.healthy" class="text-[11px] text-slate-600 mono" x-text="routerTest ? JSON.stringify(routerTest.details) : ''"></span>
+          </div>
+        </div>
+
+        <div x-show="tab === 'motor'" class="space-y-4">
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="field">Cada cuánto sincronizar (segundos)</label>
+              <input type="number" min="30" x-model.number="settings.sync_interval_seconds" class="mono">
+              <p class="text-[11px] text-slate-600 mt-1">300 = cada 5 minutos.</p>
+            </div>
+            <div>
+              <label class="field">Cuánto recordar una IP (segundos)</label>
+              <input type="number" min="60" x-model.number="settings.sliding_window_seconds" class="mono">
+              <p class="text-[11px] text-slate-600 mt-1">Evita cortes cuando un CDN rota sus IPs.</p>
+            </div>
+          </div>
+          <div>
+            <label class="field">Filtrar el feed por operador</label>
+            <input x-model="settings.feed_isp_filter" placeholder="Vacío = todos los operadores" class="mono">
+          </div>
+          <div>
+            <label class="field">URL del feed comunitario</label>
+            <input x-model="settings.hayahora_feed_url" class="mono !text-xs">
+          </div>
+          <label class="flex items-start gap-3 cursor-pointer panel-inner rounded-md p-3 border edge">
+            <input type="checkbox" x-model="settings.feed_force_active" class="!w-4 !h-4 mt-0.5">
+            <span class="text-xs text-slate-400">
+              <b class="text-slate-200">Mantener siempre la lista completa.</b>
+              Si el feed dice que no hay bloqueo activo, no se enrutará nada. Activa esto para enrutar
+              igualmente todas las IPs conocidas de la lista (más cobertura, más tráfico por la VPN).
+            </span>
+          </label>
+          <label class="flex items-start gap-3 cursor-pointer panel-inner rounded-md p-3 border edge">
+            <input type="checkbox" x-model="settings.gateway_fail_closed" class="!w-4 !h-4 mt-0.5">
+            <span class="text-xs text-slate-400">
+              <b class="text-slate-200">Cortar si la VPN cae (fail-closed).</b>
+              Si se desactiva, el tráfico bloqueado sale por tu conexión normal cuando el túnel se cae.
+            </span>
+          </label>
+          <label class="flex items-start gap-3 cursor-pointer panel-inner rounded-md p-3 border edge">
+            <input type="checkbox" x-model="settings.resolve_ipv6" class="!w-4 !h-4 mt-0.5">
+            <span class="text-xs text-slate-400">
+              <b class="text-slate-200">Incluir direcciones IPv6.</b>
+              La mayoría de routers y grupos de IPs solo aceptan IPv4. Déjalo desactivado salvo que sepas que lo necesitas.
+            </span>
+          </label>
+        </div>
+
+        <div x-show="tab === 'wg'" class="space-y-4">
+          <div class="panel-inner rounded-md p-4 border edge">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="dot" :style="'background:' + (wg.configured ? 'var(--telemetry-green)' : '#4b5563')"></span>
+              <span class="text-xs mono uppercase tracking-wider" :class="wg.configured ? 'text-emerald-400' : 'text-slate-500'"
+                    x-text="wg.configured ? 'Configuración cargada' : 'Sin configurar'"></span>
+            </div>
+            <div x-show="wg.configured" class="text-[11px] text-slate-500 space-y-1 mono">
+              <div>Peers: <b class="text-slate-300" x-text="wg.peers"></b></div>
+              <div>Subido: <b class="text-slate-300" x-text="wg.uploaded_at ? fmtDate(wg.uploaded_at) : '—'"></b></div>
+              <pre class="mt-2 p-2 rounded bg-black/40 border edge overflow-x-auto text-[10px] text-slate-500" x-text="wg.preview"></pre>
+            </div>
+          </div>
+          <div>
+            <label class="field">Subir o pegar tu wg0.conf</label>
+            <input type="file" accept=".conf,.txt" class="!py-2 !text-xs" @change="readWgFile($event)">
+            <textarea rows="8" class="mono !text-xs mt-2" x-model="wgContent"
+                      placeholder="[Interface]&#10;PrivateKey = ...&#10;Address = 10.0.0.2/32&#10;&#10;[Peer]&#10;PublicKey = ...&#10;Endpoint = vpn.example.org:51820&#10;AllowedIPs = 0.0.0.0/0"></textarea>
+            <p class="text-[11px] text-slate-600 mt-1">Solo lo usan los modos Gateway virtual. La clave privada se guarda en el volumen de datos con permisos 600.</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button class="btn btn-primary px-3 py-2 rounded-md text-xs mono uppercase" @click="uploadWg()" :disabled="busy.wg || !wgContent.trim()">Guardar configuración</button>
+            <button class="btn btn-ghost btn-danger px-3 py-2 rounded-md text-xs mono uppercase" @click="deleteWg()" :disabled="!wg.configured">Borrar</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="px-5 py-3 border-t edge flex items-center justify-end gap-2 flex-wrap">
+        <span class="mr-auto text-[11px] text-slate-600">Todo se guarda en la base de datos del propio TeByPass.</span>
+        <button class="btn btn-ghost px-3 py-2 rounded-md text-xs mono uppercase" @click="showSettings = false">Cerrar</button>
+        <button class="btn btn-primary px-3 py-2 rounded-md text-xs mono uppercase" @click="saveAllSettings()" :disabled="busy.settings">
+          <span x-show="!busy.settings">Guardar ajustes</span><span x-show="busy.settings">Guardando…</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== TOASTS ===================== -->
+  <div class="fixed bottom-4 right-4 z-[60] space-y-2">
+    <template x-for="t in toasts" :key="t.id">
+      <div class="panel rounded-md px-4 py-2.5 text-xs shadow-lg border-l-2 max-w-xs"
+           :class="t.kind === 'error' ? 'border-l-red-500 text-red-300' : 'border-l-emerald-500 text-emerald-300'">
+        <span x-text="t.msg"></span>
+      </div>
+    </template>
+  </div>
+
+<script>
+function tebypass() {
+  return {
+    ver: '{{ version }}',
+    state: { status: 'unknown', active_routes: 0, total_targets: 0, driver: { driver_name: '{{ driver_name }}', health: '?', last_sync: null } },
+    stats: { total_targets: 0, active_routes: 0 },
+    targets: [],
+    folders: [],
+    feed: null,
+    settings: {},
+    settingsLoaded: false,
+    wg: { configured: false, peers: 0, uploaded_at: null, preview: '' },
+    wgContent: '',
+    activeFolder: null,
+    search: '',
+    showTargetModal: false,
+    showBulkModal: false,
+    showFolderModal: false,
+    showSettings: false,
+    tab: 'router',
+    tabs: [
+      { id: 'router', label: 'Router' },
+      { id: 'motor', label: 'Motor' },
+      { id: 'wg', label: 'WireGuard' }
+    ],
+    targetForm: { id: null, value: '', description: '', enabled: true, folder_id: '' },
+    bulkForm: { entries: '', folder_id: '' },
+    folderForm: { name: '', color: '#f59e0b' },
+    formError: '',
+    routerTest: null,
+    busy: { sync: false, feed: false, save: false, settings: false, test: false, wg: false, resolve: null },
+    toasts: [],
+
+    async boot() {
+      await Promise.all([this.loadStatus(), this.loadTargets(), this.loadFolders(), this.loadFeeds(), this.loadSettings(), this.loadWg()]);
+      this.settingsLoaded = true;
+      setInterval(() => this.loadStatus(), 20000);
+    },
+
+    async api(method, path, body) {
+      const opts = { method: method, headers: { 'Content-Type': 'application/json' } };
+      if (body !== undefined) opts.body = JSON.stringify(body);
+      const res = await fetch(path, opts);
+      if (res.status === 204) return null;
+      const text = await res.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch (e) { data = null; }
+      if (!res.ok) {
+        const detail = (data && (data.detail || data.message)) || ('HTTP ' + res.status);
+        throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail));
       }
+      return data;
+    },
+
+    toast(msg, kind) {
+      const id = Date.now() + Math.random();
+      this.toasts.push({ id: id, msg: msg, kind: kind || 'ok' });
+      setTimeout(() => { this.toasts = this.toasts.filter(t => t.id !== id); }, 4200);
+    },
+
+    fail(err) { this.toast(err.message || 'Algo ha fallado', 'error'); },
+
+    fmtDate(value) {
+      if (!value) return '—';
+      const d = new Date(value);
+      if (isNaN(d.getTime())) return String(value);
+      return d.toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    },
+
+    driverLabel() {
+      const names = { mock: 'Simulación', unifi: 'UniFi', mikrotik: 'MikroTik', virtual_gateway: 'Gateway virtual' };
+      const d = this.state.driver || {};
+      return (names[d.driver_name] || d.driver_name || 'desconocido') + ' · ' + (d.health || '?');
+    },
+
+    lastSyncLabel() {
+      const d = this.state.driver || {};
+      return d.last_sync ? this.fmtDate(d.last_sync) : 'nunca';
+    },
+
+    filteredTargets() {
+      const q = this.search.trim().toLowerCase();
+      return this.targets.filter(t => {
+        if (this.activeFolder && t.folder_id !== this.activeFolder) return false;
+        if (!q) return true;
+        return (t.value || '').toLowerCase().includes(q)
+          || (t.description || '').toLowerCase().includes(q)
+          || (t.folder_name || '').toLowerCase().includes(q);
+      });
+    },
+
+    async loadStatus() {
+      try {
+        const s = await this.api('GET', '/api/v1/status');
+        this.state = s;
+        this.stats = { total_targets: s.total_targets, active_routes: s.active_routes };
+      } catch (e) { /* silencioso: el poller no debe inundar de toasts */ }
+    },
+
+    async loadTargets() {
+      try { this.targets = await this.api('GET', '/api/v1/targets'); } catch (e) { this.fail(e); }
+    },
+
+    async loadFolders() {
+      try { this.folders = await this.api('GET', '/api/v1/folders'); } catch (e) { this.fail(e); }
+    },
+
+    async loadFeeds() {
+      try {
+        const feeds = await this.api('GET', '/api/v1/feeds');
+        this.feed = feeds.length ? feeds[0] : null;
+      } catch (e) { this.fail(e); }
+    },
+
+    async loadSettings() {
+      try {
+        this.settings = await this.api('GET', '/api/v1/settings');
+        if (this.settings.feed_force_active === undefined) this.settings.feed_force_active = false;
+      } catch (e) { this.fail(e); }
+    },
+
+    async loadWg() {
+      try { this.wg = await this.api('GET', '/api/v1/gateway/wireguard'); } catch (e) { /* opcional */ }
+    },
+
+    async toggleFeed() {
+      if (!this.feed || this.busy.feed) return;
+      this.busy.feed = true;
+      try {
+        this.feed = await this.api('POST', '/api/v1/feeds/' + this.feed.id + '/toggle');
+        this.toast(this.feed.enabled ? 'Lista comunitaria activada' : 'Lista comunitaria desactivada');
+        await this.loadTargets();
+      } catch (e) { this.fail(e); }
+      this.busy.feed = false;
+    },
+
+    async fetchFeed() {
+      if (!this.feed || this.busy.feed) return;
+      this.busy.feed = true;
+      try {
+        const r = await this.api('POST', '/api/v1/feeds/' + this.feed.id + '/fetch');
+        this.toast('Lista actualizada: ' + (r.imported || 0) + ' destinos');
+        await Promise.all([this.loadFeeds(), this.loadTargets()]);
+      } catch (e) { this.fail(e); }
+      this.busy.feed = false;
+    },
+
+    openTargetModal(t) {
+      this.formError = '';
+      if (t) {
+        this.targetForm = { id: t.id, value: t.value, description: t.description || '', enabled: t.enabled, folder_id: t.folder_id || '' };
+      } else {
+        this.targetForm = { id: null, value: '', description: '', enabled: true, folder_id: this.activeFolder || '' };
+      }
+      this.showTargetModal = true;
+    },
+
+    async saveTarget() {
+      if (!this.targetForm.value.trim()) { this.formError = 'Escribe un dominio o una IP.'; return; }
+      this.busy.save = true;
+      this.formError = '';
+      try {
+        const payload = {
+          value: this.targetForm.value.trim(),
+          description: this.targetForm.description || null,
+          enabled: this.targetForm.enabled === true || this.targetForm.enabled === 'true',
+          folder_id: this.targetForm.folder_id || null
+        };
+        if (this.targetForm.id) {
+          await this.api('PATCH', '/api/v1/targets/' + this.targetForm.id, payload);
+          this.toast('Destino actualizado');
+        } else {
+          await this.api('POST', '/api/v1/targets', payload);
+          this.toast('Destino añadido');
+        }
+        this.showTargetModal = false;
+        await Promise.all([this.loadTargets(), this.loadFolders()]);
+      } catch (e) { this.formError = e.message; }
+      this.busy.save = false;
+    },
+
+    async toggleTarget(t) {
+      try {
+        await this.api('PATCH', '/api/v1/targets/' + t.id, { enabled: !t.enabled });
+        t.enabled = !t.enabled;
+      } catch (e) { this.fail(e); }
+    },
+
+    async resolveNow(t) {
+      this.busy.resolve = t.id;
+      try {
+        const r = await this.api('POST', '/api/v1/targets/' + t.id + '/resolve');
+        this.toast(r.ips && r.ips.length ? r.ips.length + ' IPs encontradas' : 'Sin respuesta DNS');
+        await this.loadTargets();
+      } catch (e) { this.fail(e); }
+      this.busy.resolve = null;
+    },
+
+    async deleteTarget(t) {
+      if (!confirm('¿Borrar ' + t.value + '?')) return;
+      try {
+        await this.api('DELETE', '/api/v1/targets/' + t.id);
+        this.toast('Destino borrado');
+        await Promise.all([this.loadTargets(), this.loadFolders()]);
+      } catch (e) { this.fail(e); }
+    },
+
+    async saveBulk() {
+      const entries = this.bulkForm.entries.split('\n').map(l => l.trim()).filter(Boolean);
+      if (!entries.length) { this.toast('Nada que importar', 'error'); return; }
+      this.busy.save = true;
+      try {
+        const r = await this.api('POST', '/api/v1/targets/bulk', { entries: entries, folder_id: this.bulkForm.folder_id || null });
+        this.toast('Añadidos ' + r.created + ', omitidos ' + r.skipped);
+        this.showBulkModal = false;
+        this.bulkForm.entries = '';
+        await Promise.all([this.loadTargets(), this.loadFolders()]);
+      } catch (e) { this.fail(e); }
+      this.busy.save = false;
+    },
+
+    async saveFolder() {
+      if (!this.folderForm.name.trim()) { this.toast('Ponle un nombre', 'error'); return; }
+      try {
+        await this.api('POST', '/api/v1/folders', { name: this.folderForm.name.trim(), color: this.folderForm.color });
+        this.showFolderModal = false;
+        this.folderForm.name = '';
+        this.toast('Lista creada');
+        await this.loadFolders();
+      } catch (e) { this.fail(e); }
+    },
+
+    async deleteFolder(f) {
+      if (!confirm('¿Eliminar la lista "' + f.name + '"? Los dominios no se borran, se quedan sin lista.')) return;
+      try {
+        await this.api('DELETE', '/api/v1/folders/' + f.id);
+        if (this.activeFolder === f.id) this.activeFolder = null;
+        await Promise.all([this.loadFolders(), this.loadTargets()]);
+      } catch (e) { this.fail(e); }
+    },
+
+    async syncNow() {
+      this.busy.sync = true;
+      try {
+        const r = await this.api('POST', '/api/v1/sync', { force: true });
+        this.toast('Sincronizado: +' + r.added_count + ' / -' + r.removed_count + ' (total ' + r.total_active + ')');
+        await this.loadStatus();
+      } catch (e) { this.fail(e); }
+      this.busy.sync = false;
+    },
+
+    openSettings() { this.routerTest = null; this.showSettings = true; },
+
+    async saveAllSettings() {
+      this.busy.settings = true;
+      try {
+        this.settings = await this.api('PUT', '/api/v1/settings', this.settings);
+        this.toast('Ajustes guardados');
+        await this.loadStatus();
+      } catch (e) { this.fail(e); }
+      this.busy.settings = false;
+    },
+
+    async testRouter() {
+      this.busy.test = true;
+      this.routerTest = null;
+      try {
+        await this.api('PUT', '/api/v1/settings', this.settings);
+        this.routerTest = await this.api('POST', '/api/v1/settings/test-router', {});
+      } catch (e) { this.fail(e); }
+      this.busy.test = false;
+    },
+
+    readWgFile(ev) {
+      const file = ev.target.files && ev.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => { this.wgContent = String(reader.result || ''); };
+      reader.readAsText(file);
+    },
+
+    async uploadWg() {
+      this.busy.wg = true;
+      try {
+        await this.api('POST', '/api/v1/gateway/wireguard', { content: this.wgContent });
+        this.toast('Configuración WireGuard guardada');
+        this.wgContent = '';
+        await this.loadWg();
+      } catch (e) { this.fail(e); }
+      this.busy.wg = false;
+    },
+
+    async deleteWg() {
+      if (!confirm('¿Borrar la configuración WireGuard guardada?')) return;
+      try {
+        await this.api('DELETE', '/api/v1/gateway/wireguard');
+        this.toast('Configuración borrada');
+        await this.loadWg();
+      } catch (e) { this.fail(e); }
     }
-  </script>
+  };
+}
+</script>
 </body>
 </html>

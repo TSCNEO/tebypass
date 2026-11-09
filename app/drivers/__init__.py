@@ -23,8 +23,26 @@ __all__ = [
     "TargetCIDR",
     "UniFiRouterDriver",
     "VirtualGatewayDriver",
+    "get_driver",
     "get_router_driver",
+    "invalidate_driver",
 ]
+
+_cached_driver: BaseRouterDriver | None = None
+
+
+def get_driver() -> BaseRouterDriver:
+    """Return the process-wide router driver, instantiating it on first use."""
+    global _cached_driver
+    if _cached_driver is None:
+        _cached_driver = get_router_driver()
+    return _cached_driver
+
+
+def invalidate_driver() -> None:
+    """Drop the cached driver so the next call rebuilds it from the current settings."""
+    global _cached_driver
+    _cached_driver = None
 
 
 def get_router_driver(custom_settings: Settings | None = None) -> BaseRouterDriver:

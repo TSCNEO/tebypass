@@ -1,138 +1,175 @@
 # TeByPass
 
-<p align="center">
-  <strong>Motor agnóstico y modular de desvío dinámico en Capa 3 (L3 Split-Routing)</strong>
-</p>
+**Tu internet normal, salvo lo que te bloquean.**
 
-<p align="center">
-  <img src="https://img.shields.io/badge/python-3.12%2B-blue.svg" alt="Python 3.12+">
-  <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License MIT">
-  <img src="https://img.shields.io/badge/code%20style-ruff-000000.svg" alt="Ruff">
-  <img src="https://img.shields.io/badge/types-mypy%20strict-informational.svg" alt="Mypy Strict">
-  <img src="https://img.shields.io/badge/architecture-0%20monolitos-amber.svg" alt="0 Monoliths">
-</p>
+TeByPass manda por una VPN **solo** el tráfico que tu operador bloquea (fútbol, LaLiga, dominios concretos). Todo lo demás sigue saliendo por tu fibra, a velocidad completa y sin pasar por ningún túnel.
 
 ---
 
-## 🎯 ¿Qué es TeByPass?
+## El problema
 
-**TeByPass** es un motor de enrutamiento selectivo de alta eficiencia diseñado para evadir bloqueos arbitrarios en redes sin la penalización de un túnel VPN completo (Full-Tunnel) ni la sobrecarga de descifrado TLS de los proxies de Capa 7.
+Tu operador bloquea ciertas webs y servicios: las páginas de fútbol, algunos dominios de LaLiga, ciertos CDNs. Desde tu casa aparecen caídas o inaccesibles, y no hay nada que puedas tocar en el móvil o en la tele para arreglarlo.
 
-El sistema monitoriza listas dinámicas de destinos (FQDNs y prefijos CIDR), resuelve periódicamente los nombres utilizando el resolver nativo del anfitrión, mantiene una caché de ventana deslizante para evitar caídas durante transmisiones activas, e inyecta únicamente los prefijos necesarios en el router o sidecar de la red local.
-
----
-
-## ⚡ Características Principales
-
-- **0 Monolitos**: Arquitectura estrictamente modular y desacoplada en cuatro capas (Core Engine, Drivers de Router, Web/API, Sidecar Gateway).
-- **L3 Split-Routing Puro**: El tráfico ordinario no catalogado navega directamente a velocidad nativa sin tocar ningún túnel. Solo los destinos catalogados se desvían por WireGuard.
-- **Resolución DNS Nativa**: Delegación en la pila `libc` del sistema (`getaddrinfo`), respetando servidores DNS locales (AdGuard Home, Pi-hole, Unbound) sin servidores DNS fijos forzados.
-- **Caché con Ventana Deslizante (Sliding-Window TTL)**: Evita microcortes o expiraciones abruptas de IPs en mitad de eventos de streaming.
-- **Reconciliación Idempotente**: Cálculo diferencial estricto antes de aplicar cambios en el router, evitando escrituras repetidas y saturación de tablas.
-- **Drivers Pluggables**:
-  - `MockRouterDriver`: Para pruebas automatizadas y desarrollo sin hardware.
-  - `VirtualGatewayDriver`: Para integración directa con el contenedor sidecar Alpine + nftables.
-  - `UniFiRouterDriver`: Para routers UniFi (Dream Machine / Cloud Gateway).
-  - `MikroTikRouterDriver`: Para RouterOS v7 mediante REST API.
-- **UI Industrial sin Node.js**: Panel de telemetría y control basado en Jinja2 + Alpine.js en puerto por defecto `9384`.
+La solución habitual es meter **toda la casa** por una VPN. Y eso trae factura: pierdes velocidad, sube la latencia, y se rompen cosas que funcionaban perfectamente (la banca, Netflix, la TV de la operadora) y aparecen comprobaciones que antes no saltaban.
 
 ---
 
-## 🏗️ Resumen de Arquitectura
+## La solución: un bypass quirúrgico
 
-```
-[Dispositivos LAN] ───▶ [Router / TeByPass Sidecar]
-                               │
-            ┌──────────────────┴──────────────────┐
-     (Destino Ordinario)                   (Destino Catalogado)
-            │                                     │
-            ▼                                     ▼
-    [Salida ISP Directa]                  [Túnel WireGuard L3]
-    (Baja Latencia / 100% Ancho)          (Tráfico Evasión Seguro)
-```
+TeByPass no desvía tu casa entera. Desvía **solo las direcciones IP que están bloqueadas**. El resto del tráfico ni se entera de que existe.
+
+Piensa en un desvío en la carretera: cuando cortan un tramo, no te obligan a dar la vuelta a la provincia entera. Te desvían por la variante, pasas ese tramo, y vuelves a tu ruta. El resto del viaje es exactamente igual de rápido que siempre.
+
+Eso es todo. Unas pocas IPs van por el túnel. Tus descargas, tu Netflix, tu trabajo y tus videollamadas van por donde iban.
 
 ---
 
-## 🚀 Inicio Rápido (Quickstart)
+## Ventajas
 
-### Requisitos Previos
-- Docker y Docker Compose (o Python 3.12+ para ejecución en host).
+- **Velocidad intacta** para todo lo que no está bloqueado. La VPN solo transporta lo imprescindible: unos pocos rangos de IP, no tu tráfico doméstico.
+- **Cero apps y cero certificados** en la tele, el móvil o el PC. Se resuelve en el router o en un pequeño gateway de la red: tus dispositivos no configuran nada.
+- **Funciona con lo que ya tienes**: router avanzado (UniFi, MikroTik) o router de operadora usando el modo gateway virtual.
+- **Se adapta solo**: cuando un CDN cambia sus IPs, el sistema vuelve a resolver y actualiza la lista. La ventana deslizante evita que una IP desaparezca en mitad de un partido.
+- **Lista comunitaria de LaLiga** (feed de HayAHora) más tus propias listas de dominios. Puedes mezclarlas o usar solo las tuyas.
+- **Todo se configura desde la web**: router, credenciales, intervalos y WireGuard. Sin editar ficheros ni reiniciar contenedores.
+- **Versión dinámica visible** en la interfaz: siempre sabes qué build estás corriendo y con qué commit.
+- **Control si el túnel cae**: eliges entre cortar el tráfico afectado (fail-closed) o dejarlo salir por la conexión normal.
 
-### Despliegue con Docker Compose
-1. Clona el repositorio e inicia los servicios:
+---
+
+## Cómo funciona por dentro
+
+Para quien tenga curiosidad, el ciclo es corto y repetitivo:
+
+1. **Resuelve los dominios con tu propio DNS.** Usa el resolver del sistema, así obtiene exactamente las mismas IPs que ve tu red (y respeta tu Pi-hole, AdGuard o el DNS de tu operador).
+2. **Guarda esas IPs en una ventana deslizante.** Cada IP resuelta tiene una caducidad que se va desplazando mientras el destino siga activo.
+3. **Calcula la diferencia** entre lo que debería haber en el router y lo que hay ahora mismo.
+4. **Aplica solo los cambios.** Si no hay diferencia, no toca nada.
+
+El proceso es **idempotente**: ejecutarlo diez veces seguidas produce el mismo resultado que ejecutarlo una. Y nunca borra una IP demasiado pronto: prefiere mantener cobertura de más antes que cortarte el stream.
+
+---
+
+## Arranque rápido con Docker
+
 ```bash
+git clone https://github.com/TSCNEO/tebypass.git
+cd tebypass
 docker compose up -d
 ```
-2. Accede al panel de control en tu navegador:
-```
-http://localhost:9384
-```
 
-### Configuración con Variables de Entorno
-Crea un archivo `.env` o configura las variables en tu orquestador:
+Abre **http://localhost:9384** y configura todo desde la interfaz: driver de router, credenciales, la lista comunitaria, tus dominios y el túnel.
+
+No hace falta editar `.env` ni `docker-compose.yml`. La configuración vive en una base de datos SQLite dentro del volumen de datos (`/data`), así que sobrevive a reinicios y actualizaciones de la imagen. Solo hay dos variables de entorno opcionales, y únicamente si quieres cambiar dónde escucha o dónde guarda:
 
 ```bash
-# Puerto de escucha del servicio web
 TEBYPASS_PORT=9384
-TEBYPASS_HOST=0.0.0.0
-
-# Base de datos SQLite (modo WAL automático)
-TEBYPASS_DB_PATH=/data/tebypass.db
-
-# Driver de enrutamiento activo: mock | virtual_gateway | unifi | mikrotik
-TEBYPASS_ROUTER_DRIVER=mock
-
-# Intervalo de reconciliación en segundos
-TEBYPASS_SYNC_INTERVAL_SECONDS=300
-
-# Ventana deslizante de TTL para caché (segundos)
-TEBYPASS_SLIDING_WINDOW_SECONDS=3600
-
-# PIN Maestro para operaciones privilegiadas
-TEBYPASS_MASTER_PIN_HASH=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
-
-# Feeds remotos iniciales (ejemplo neutral conforme a RFC 2606)
-TEBYPASS_INITIAL_FEEDS='[{"name":"Neutral Feed","url":"https://feed.example.net/bypass.json","format":"json"}]'
+TEBYPASS_DATABASE_URL=sqlite+aiosqlite:////data/tebypass.db
 ```
+
+Si no las defines, se usan esos mismos valores por defecto.
 
 ---
 
-## 🧪 Desarrollo Local y Verificación
+## Los dos modos
 
-Instalación de dependencias con `uv` o `pip`:
+| | **Modo Router** (recomendado) | **Modo Gateway virtual** |
+| :--- | :--- | :--- |
+| **Para qué** | Ya tienes UniFi o MikroTik | Router de operadora, sin opciones avanzadas |
+| **Cómo funciona** | TeByPass crea y mantiene una lista de IPs en el propio router (firewall group en UniFi, address-list en MikroTik) | Un contenedor Alpine con WireGuard y nftables hace de puerta de enlace para los dispositivos que quieras |
+| **Dónde va el túnel** | En el router | En el contenedor `tebypass-gateway` |
+| **Qué toca tu red** | Nada más que la lista de IPs | Los dispositivos apuntan su puerta de enlace al gateway |
+| **Ventaja** | Sin saltos extra, cero latencia añadida | No necesitas cambiar de router |
+
+En el modo gateway, el sidecar se levanta con el perfil `gateway`:
+
 ```bash
-# Con uv (recomendado)
-uv venv
-source .venv/bin/activate
-uv pip install -e ".[dev]"
-
-# Ejecución de linters y formateadores
-ruff check .
-ruff format --check .
-
-# Verificación de tipos estricta
-mypy app tests
-
-# Ejecución de la suite de pruebas
-pytest
+docker compose --profile gateway up -d
 ```
 
 ---
 
-## 🔒 Privacidad y Agnosticismo
+## La interfaz, en cuatro ideas
 
-Este proyecto es **100% agnóstico a cualquier infraestructura de red**. No incluye credenciales predeterminadas, nombres de servidores de prueba reales ni direcciones IP de infraestructuras personales. Todos los ejemplos de documentación emplean bloques reservados por IANA/IETF según **RFC 5737** (`192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24`) y **RFC 2606** (`example.com`, `example.org`, `example.net`).
-
----
-
-## 🙏 Agradecimientos y Créditos
-
-TeByPass reconoce y agradece profundamente a:
-- **jcastro / stopliga**: Por el trabajo de documentación, transparencia y catalogación técnica contra el bloqueo arbitrario.
-- **Comunidad hayahora.futbol**: Por mantener fuentes abiertas de conocimiento y coordinación comunitaria.
+- **Activar o desactivar la lista comunitaria** de LaLiga con un clic. Si el feed dice que no hay bloqueo activo, no enruta nada: no gasta VPN sin motivo.
+- **Crear listas propias** (por temas: streaming, trabajo, lo que sea) y añadir dominios o rangos a mano, uno a uno o en bloque.
+- **Ver las IPs resueltas** de cada destino y forzar una resolución cuando quieras comprobar algo.
+- **Subir tu `wg0.conf`** desde el navegador: se valida, se guarda con permisos restringidos y la vista previa oculta las claves privadas.
 
 ---
 
-## 📄 Licencia
+## Preguntas frecuentes
 
-Este proyecto está bajo la Licencia **MIT**. Consulta el archivo `LICENSE` para más información.
+**¿Necesito saber de redes?**
+No. Si sabes abrir el panel de tu router y copiar una URL, sabes usar TeByPass. Los conceptos raros (CIDR, ventana deslizante, reconciliación) los gestiona el programa.
+
+**¿Va más lento mi internet?**
+Solo lo que pasa por la VPN, que es una minoría del tráfico. Una descarga, una videollamada o un partido por la tele de la operadora no tocan el túnel.
+
+**¿Se rompe Netflix, la banca o la TV de la operadora?**
+No. No pasan por el túnel, así que te ven con tu IP de siempre. Ese es justamente el motivo de existir de este proyecto.
+
+**¿Y si el operador o un CDN cambia las IPs?**
+Se actualiza solo en el siguiente ciclo: vuelve a resolver los dominios, compara y aplica la diferencia. No tienes que hacer nada.
+
+**¿Dónde se guardan mis credenciales?**
+En tu SQLite local, dentro de tu volumen de datos. No salen de tu máquina, y la API las devuelve enmascaradas cuando las consultas.
+
+**¿Funciona en cualquier red?**
+Sí. Es agnóstico: no hay IPs, DNS ni routers hardcodeados. Todo se configura en la interfaz, y los ejemplos de la documentación usan dominios y rangos reservados por la IETF (RFC 2606 y RFC 5737).
+
+---
+
+## Arquitectura para desarrolladores
+
+El proyecto sigue la regla de **0 monolitos**: cada capa tiene una responsabilidad y un contrato claro.
+
+| Ruta | Qué hay dentro |
+| :--- | :--- |
+| `app/core` | Motor de reconciliación, resolver DNS nativo, caché de ventana deslizante, ingesta de feeds y configuración |
+| `app/drivers` | Implementaciones de `BaseRouterDriver`: `mock`, `virtual_gateway`, `unifi`, `mikrotik` |
+| `app/db` | SQLAlchemy 2.0 + `aiosqlite` sobre SQLite en modo WAL |
+| `app/api` | Endpoints REST: estado, targets, feeds, carpetas, ajustes y WireGuard |
+| `app/templates` | Panel web en Jinja2 + Alpine.js, sin Node.js en runtime |
+| `gateway/` | Sidecar Alpine con nftables y WireGuard (`wg0`), independiente del runtime de Python |
+
+Documentación de detalle:
+
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — componentes, contratos y modelo de datos.
+- [docs/DECISIONS.md](docs/DECISIONS.md) — decisiones de arquitectura y por qué se tomaron.
+- [docs/ROADMAP.md](docs/ROADMAP.md) — fases y estado del proyecto.
+- [AGENTS.md](AGENTS.md) — normas de trabajo, calidad y privacidad del repositorio.
+
+Desarrollo local:
+
+```bash
+uv venv && source .venv/bin/activate
+uv pip install -e ".[dev]"
+pytest
+ruff check . && mypy app tests
+```
+
+---
+
+## Créditos
+
+Este proyecto no sería posible sin el trabajo de otras personas, hecho a menudo gratis y en su tiempo libre:
+
+- **jcastro / stopliga** — por la catalogación, la documentación y la transparencia frente a los bloqueos arbitrarios. Buena parte de lo que sabemos de cómo se comportan estos bloqueos viene de ahí.
+- **Comunidad de hayahora.futbol** — por mantener vivas y abiertas las listas que alimentan la detección de bloqueos de LaLiga.
+
+Gracias de verdad. Si TeByPass te resulta útil, el mérito de los datos es suyo.
+
+---
+
+## Aviso legal
+
+TeByPass es una **herramienta de enrutamiento**: decide por dónde sale cada paquete. No incluye contenido, no descifra nada y no salta ninguna suscripción.
+
+Úsala solo para acceder a contenido para el que tengas derecho de acceso. No está pensada para evadir suscripciones, paywalls ni medidas de protección de contenido. Lo que hagas con ella es responsabilidad tuya y debe cumplir la ley de tu país y las condiciones de los servicios que uses.
+
+---
+
+## Licencia
+
+MIT. Consulta [LICENSE](LICENSE).

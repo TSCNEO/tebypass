@@ -1,44 +1,86 @@
 """Target management and route synchronization endpoints."""
 
-import ipaddress
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.cache import SlidingWindowCache
 from app.core.config import settings
 from app.core.engine import ReconciliationEngine
+from app.core.feeds import FeedManager
 from app.core.resolver import NativeDNSResolver
-from app.db.models import Target
+from app.core.targets import as_utc, dedupe_key, detect_destination_type
+from app.db.models import Folder, ResolvedIP, Target
 from app.db.session import get_db
-from app.drivers import get_router_driver
-from app.models.schemas import SyncResponse, SyncTriggerRequest, TargetCreate, TargetResponse
+from app.drivers import get_driver
+from app.models.schemas import (
+    BulkTargetImportRequest,
+    BulkTargetImportResponse,
+    SyncResponse,
+    SyncTriggerRequest,
+    TargetCreate,
+    TargetResolveResponse,
+    TargetResponse,
+    TargetUpdate,
+)
 
 router = APIRouter(prefix="/api/v1", tags=["Routes"])
+
+_TARGET_LOAD_OPTIONS = (
+    selectinload(Target.resolved_ips),
+    selectinload(Target.folder),
+)
+
+
+def _active_ips(target: Target, now: datetime | None = None) -> list[str]:
+    """Return non-expired resolved IPs of a target, sorted and deduplicated."""
+    current_time = now or datetime.now(UTC)
+    return sorted(
+        {rip.ip_address for rip in target.resolved_ips if as_utc(rip.expires_at) > current_time}
+    )
+
+
+def _to_response(target: Target, now: datetime | None = None) -> TargetResponse:
+    resolved_ips = _active_ips(target, now)
+    return TargetResponse(
+        id=target.id,
+        feed_id=target.feed_id,
+        folder_id=target.folder_id,
+        folder_name=target.folder.name if target.folder else None,
+        value=target.value,
+        destination_type="cidr" if target.destination_type == "cidr" else "fqdn",
+        description=target.description,
+        enabled=target.enabled,
+        created_at=target.created_at,
+        resolved_count=len(resolved_ips),
+        resolved_ips=resolved_ips,
+    )
+
+
+async def _load_target(db: AsyncSession, target_id: str) -> Target:
+    query = select(Target).where(Target.id == target_id).options(*_TARGET_LOAD_OPTIONS)
+    target = (await db.execute(query)).scalar_one_or_none()
+    if target is None:
+        raise HTTPException(status_code=404, detail="Target not found")
+    return target
+
+
+async def _validate_folder(db: AsyncSession, folder_id: str) -> None:
+    folder = await db.get(Folder, folder_id)
+    if folder is None:
+        raise HTTPException(status_code=404, detail="Folder not found")
 
 
 @router.get("/targets", response_model=list[TargetResponse])
 async def list_targets(db: AsyncSession = Depends(get_db)) -> list[TargetResponse]:
-    """Retrieve all configured targets."""
-    query = select(Target).order_by(Target.created_at.desc())
+    """Retrieve all configured targets with their currently resolved IPs."""
+    query = select(Target).options(*_TARGET_LOAD_OPTIONS).order_by(Target.created_at.desc())
     result = await db.execute(query)
-    targets = result.scalars().all()
-    responses: list[TargetResponse] = []
-    for t in targets:
-        responses.append(
-            TargetResponse(
-                id=t.id,
-                feed_id=t.feed_id,
-                value=t.value,
-                destination_type="cidr" if t.destination_type == "cidr" else "fqdn",
-                description=t.description,
-                enabled=t.enabled,
-                created_at=t.created_at,
-                resolved_count=len(t.resolved_ips) if t.resolved_ips else 0,
-            )
-        )
-    return responses
+    now = datetime.now(UTC)
+    return [_to_response(target, now) for target in result.scalars().all()]
 
 
 @router.post("/targets", response_model=TargetResponse, status_code=status.HTTP_201_CREATED)
@@ -48,39 +90,60 @@ async def create_target(
 ) -> TargetResponse:
     """Create a new manual target (FQDN or CIDR)."""
     raw_val = payload.value.strip()
+    if not raw_val:
+        raise HTTPException(status_code=400, detail="Target value must not be empty")
 
-    # Determine destination type
-    dest_type = payload.destination_type
-    if not dest_type:
-        try:
-            if "/" in raw_val:
-                ipaddress.ip_network(raw_val, strict=False)
-            else:
-                ipaddress.ip_address(raw_val)
-            dest_type = "cidr"
-        except ValueError:
-            dest_type = "fqdn"
+    if payload.folder_id:
+        await _validate_folder(db, payload.folder_id)
+
+    dest_type = payload.destination_type or detect_destination_type(raw_val)
 
     target = Target(
         value=raw_val,
         destination_type=dest_type,
         description=payload.description,
         enabled=payload.enabled,
+        folder_id=payload.folder_id,
     )
     db.add(target)
     await db.commit()
-    await db.refresh(target)
 
-    return TargetResponse(
-        id=target.id,
-        feed_id=target.feed_id,
-        value=target.value,
-        destination_type=dest_type,
-        description=target.description,
-        enabled=target.enabled,
-        created_at=target.created_at,
-        resolved_count=0,
-    )
+    loaded = await _load_target(db, target.id)
+    return _to_response(loaded)
+
+
+@router.patch("/targets/{target_id}", response_model=TargetResponse)
+async def update_target(
+    target_id: str,
+    payload: TargetUpdate,
+    db: AsyncSession = Depends(get_db),
+) -> TargetResponse:
+    """Partially update a target (value, description, enabled flag or folder)."""
+    target = await _load_target(db, target_id)
+    changes = payload.model_dump(exclude_unset=True)
+
+    if "value" in changes:
+        raw_val = (changes["value"] or "").strip()
+        if not raw_val:
+            raise HTTPException(status_code=400, detail="Target value must not be empty")
+        target.value = raw_val
+        target.destination_type = detect_destination_type(raw_val)
+
+    if "description" in changes:
+        target.description = changes["description"]
+
+    if "enabled" in changes and changes["enabled"] is not None:
+        target.enabled = bool(changes["enabled"])
+
+    if "folder_id" in changes:
+        folder_id = changes["folder_id"]
+        if folder_id:
+            await _validate_folder(db, folder_id)
+        target.folder_id = folder_id
+
+    await db.commit()
+    loaded = await _load_target(db, target_id)
+    return _to_response(loaded)
 
 
 @router.delete("/targets/{target_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -98,10 +161,115 @@ async def delete_target(
     await db.commit()
 
 
+@router.post("/targets/bulk", response_model=BulkTargetImportResponse)
+async def bulk_import_targets(
+    payload: BulkTargetImportRequest,
+    db: AsyncSession = Depends(get_db),
+) -> BulkTargetImportResponse:
+    """Import targets from a list of raw lines, skipping invalid and duplicate entries."""
+    if payload.folder_id:
+        await _validate_folder(db, payload.folder_id)
+
+    manager = FeedManager()
+    existing_query = select(Target.value)
+    existing_keys = {
+        dedupe_key(value) for value in (await db.execute(existing_query)).scalars().all()
+    }
+
+    created = 0
+    skipped = 0
+    invalid: list[str] = []
+
+    for chunk in payload.entries:
+        for raw_line in chunk.splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+
+            parsed = manager.parse_entry(line)
+            if parsed is None:
+                invalid.append(line)
+                continue
+
+            key = dedupe_key(parsed.value)
+            if key in existing_keys:
+                skipped += 1
+                continue
+
+            description = payload.description or parsed.description or None
+            db.add(
+                Target(
+                    value=parsed.value,
+                    destination_type=parsed.destination_type,
+                    description=description,
+                    enabled=True,
+                    folder_id=payload.folder_id,
+                )
+            )
+            existing_keys.add(key)
+            created += 1
+
+    if created:
+        await db.commit()
+
+    return BulkTargetImportResponse(created=created, skipped=skipped, invalid=invalid)
+
+
+@router.post("/targets/{target_id}/resolve", response_model=TargetResolveResponse)
+async def resolve_target_now(
+    target_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> TargetResolveResponse:
+    """Force an immediate DNS resolution for one target and persist the result."""
+    target = await _load_target(db, target_id)
+
+    if target.destination_type != "fqdn":
+        return TargetResolveResponse(value=target.value, ips=[target.value])
+
+    cache = SlidingWindowCache(default_window_seconds=settings.sliding_window_seconds)
+    resolver = NativeDNSResolver(cache=cache)
+    resolutions = await resolver.resolve_fqdn(
+        target.value,
+        window_extension_seconds=settings.sliding_window_seconds,
+    )
+
+    now = datetime.now(UTC)
+    for resolution in resolutions:
+        lookup = select(ResolvedIP).where(
+            ResolvedIP.target_id == target.id,
+            ResolvedIP.ip_address == resolution.ip_address,
+        )
+        stored = (await db.execute(lookup)).scalar_one_or_none()
+        if stored is None:
+            db.add(
+                ResolvedIP(
+                    target_id=target.id,
+                    ip_address=resolution.ip_address,
+                    cidr=resolution.cidr,
+                    first_seen_at=now,
+                    last_seen_at=now,
+                    expires_at=resolution.expires_at,
+                    ttl_seconds=resolution.dns_ttl,
+                )
+            )
+        else:
+            stored.last_seen_at = now
+            stored.expires_at = resolution.expires_at
+            stored.ttl_seconds = resolution.dns_ttl
+
+    if resolutions:
+        await db.commit()
+
+    return TargetResolveResponse(
+        value=target.value,
+        ips=sorted({resolution.ip_address for resolution in resolutions}),
+    )
+
+
 @router.get("/routes/active", response_model=list[str])
 async def get_active_routes() -> list[str]:
     """List all CIDRs currently injected in the active router driver."""
-    driver = get_router_driver()
+    driver = get_driver()
     routes = await driver.get_current_routes()
     return sorted(routes)
 
@@ -111,7 +279,7 @@ async def trigger_sync(
     payload: SyncTriggerRequest | None = None,
 ) -> SyncResponse:
     """Manually trigger route reconciliation with router driver."""
-    driver = get_router_driver()
+    driver = get_driver()
     cache = SlidingWindowCache(default_window_seconds=settings.sliding_window_seconds)
     resolver = NativeDNSResolver(cache=cache)
     engine = ReconciliationEngine(driver=driver, cache=cache, resolver=resolver)

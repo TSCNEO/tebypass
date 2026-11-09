@@ -6,13 +6,15 @@ import logging
 import time
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from app.core.cache import SlidingWindowCache
 from app.core.config import settings
+from app.core.feeds_sync import refresh_due_feeds
 from app.core.resolver import NativeDNSResolver
-from app.db.models import ResolvedIP, SyncEvent, Target
+from app.db.models import Feed, ResolvedIP, SyncEvent, Target
 from app.db.session import AsyncSessionLocal
+from app.drivers import get_driver
 from app.drivers.base import BaseRouterDriver, SyncResult, TargetCIDR
 
 logger = logging.getLogger("tebypass.engine")
@@ -23,12 +25,12 @@ class ReconciliationEngine:
 
     def __init__(
         self,
-        driver: BaseRouterDriver,
+        driver: BaseRouterDriver | None,
         cache: SlidingWindowCache,
         resolver: NativeDNSResolver,
         sync_interval_seconds: int = 300,
     ) -> None:
-        self.driver = driver
+        self._driver = driver
         self.cache = cache
         self.resolver = resolver
         self.sync_interval = sync_interval_seconds
@@ -36,17 +38,42 @@ class ReconciliationEngine:
         self._stop_event = asyncio.Event()
         self._is_syncing = asyncio.Lock()
 
+    @property
+    def driver(self) -> BaseRouterDriver:
+        """Return the live driver, picking up hot configuration changes."""
+        if self._driver is None:
+            self._driver = get_driver()
+        return self._driver
+
+    @driver.setter
+    def driver(self, value: BaseRouterDriver) -> None:
+        self._driver = value
+
     async def reconcile(self, force: bool = False) -> SyncResult:
-        """Execute a complete reconciliation cycle: resolve, diff, and dispatch to driver."""
+        """Execute a complete reconciliation cycle: refresh feeds, resolve, diff and dispatch."""
         async with self._is_syncing:
             start_time = time.perf_counter()
             now = datetime.now(UTC)
 
-            # 1. Fetch enabled targets from DB
+            # 0. Refresh any remote feed that is due (respecting its enabled toggle)
+            async with AsyncSessionLocal() as feed_session:
+                try:
+                    await refresh_due_feeds(feed_session, settings.sync_interval_seconds)
+                except Exception as ex:  # noqa: BLE001 - never abort a sync because of a feed
+                    logger.warning("Feed refresh failed: %s", ex)
+
+            # 1. Fetch enabled targets from DB (a disabled feed contributes nothing)
             desired_targets: dict[str, TargetCIDR] = {}
 
             async with AsyncSessionLocal() as session:
-                query = select(Target).where(Target.enabled.is_(True))
+                query = (
+                    select(Target)
+                    .join(Feed, Target.feed_id == Feed.id, isouter=True)
+                    .where(
+                        Target.enabled.is_(True),
+                        or_(Target.feed_id.is_(None), Feed.enabled.is_(True)),
+                    )
+                )
                 result = await session.execute(query)
                 targets = result.scalars().all()
 
@@ -146,8 +173,11 @@ class ReconciliationEngine:
             except Exception as ex:
                 logger.error("Error in scheduled reconciliation: %s", ex, exc_info=True)
 
+            # Re-read the interval every cycle so the UI can change it without a restart
+            interval = max(int(settings.sync_interval_seconds), 30)
+            self.sync_interval = interval
             with contextlib.suppress(TimeoutError):
-                await asyncio.wait_for(self._stop_event.wait(), timeout=float(self.sync_interval))
+                await asyncio.wait_for(self._stop_event.wait(), timeout=float(interval))
 
     def start_periodic_sync(self) -> None:
         """Start the background sync worker."""

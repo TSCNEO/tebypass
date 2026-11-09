@@ -31,13 +31,42 @@ class Settings(BaseSettings):
     )  # mock, virtual_gateway, unifi, mikrotik
     sync_interval_seconds: int = 300
     sliding_window_seconds: int = 3600
+    resolve_ipv6: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("TEBYPASS_RESOLVE_IPV6", "RESOLVE_IPV6"),
+    )
     master_pin_hash: str | None = None
     secret_key: str = "change-me-in-production-neutral-secret-key"
     log_level: str = "INFO"
 
+    # Feed ingestion behaviour (persisted in SQLite and editable from the UI)
+    feed_force_active: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "TEBYPASS_FEED_FORCE_ACTIVE",
+            "FEED_FORCE_ACTIVE",
+        ),
+    )
+    feed_isp_filter: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "TEBYPASS_FEED_ISP_FILTER",
+            "FEED_ISP_FILTER",
+        ),
+    )
+    hayahora_feed_url: str = Field(
+        default="https://hayahora.futbol/estado/data.json",
+        validation_alias=AliasChoices(
+            "TEBYPASS_HAYAHORA_FEED_URL",
+            "HAYAHORA_FEED_URL",
+        ),
+    )
+
     # Gateway Driver specific configuration
     gateway_nft_set_name: str = "tebypass_targets"
     gateway_control_socket: str | None = None
+    gateway_fail_closed: bool = True
+    wireguard_config_path: str = "/data/wireguard/wg0.conf"
 
     # UniFi Driver specific configuration
     unifi_controller_url: str | None = Field(

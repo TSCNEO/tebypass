@@ -4,9 +4,12 @@ import ipaddress
 import json
 import logging
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 import httpx
+
+from app.core.config import settings
 
 logger = logging.getLogger("tebypass.feeds")
 
@@ -59,7 +62,109 @@ class FeedManager:
 
         return None
 
-    def parse_content(self, text_content: str, feed_format: str = "json") -> list[ParsedTarget]:
+    @staticmethod
+    def _parse_timestamp(raw: Any) -> datetime | None:
+        """Parse the timestamp formats used by community feeds (ISO-8601, optional 'Z')."""
+        if not isinstance(raw, str):
+            return None
+        candidate = raw.strip().replace(" ", "T", 1)
+        if candidate.endswith(("Z", "z")):
+            candidate = f"{candidate[:-1]}+00:00"
+        try:
+            parsed = datetime.fromisoformat(candidate)
+        except ValueError:
+            return None
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+
+    @classmethod
+    def _latest_state(cls, state_changes: Any) -> bool:
+        """Return the most recent state flag of a HayAHora entry.
+
+        Entries without any state change are considered active: the feed only lists
+        problematic endpoints, so absence of history is not evidence of normal operation.
+        """
+        if not isinstance(state_changes, list) or not state_changes:
+            return True
+
+        latest_ts: datetime | None = None
+        latest_state = True
+        for change in state_changes:
+            if not isinstance(change, dict):
+                continue
+            state = change.get("state")
+            if not isinstance(state, bool):
+                continue
+            timestamp = cls._parse_timestamp(change.get("timestamp"))
+            if timestamp is None:
+                continue
+            if latest_ts is None or timestamp >= latest_ts:
+                latest_ts = timestamp
+                latest_state = state
+        return latest_state
+
+    def _parse_hayahora_entry(
+        self,
+        entry: Any,
+        force_active: bool,
+        isp_filter: str,
+    ) -> ParsedTarget | None:
+        """Parse a single ``data[]`` element of the HayAHora / StopLiga payload."""
+        if not isinstance(entry, dict):
+            return None
+
+        ip_value = entry.get("ip")
+        if not isinstance(ip_value, str) or not ip_value.strip():
+            return None
+
+        isp = entry.get("isp")
+        isp_name = isp.strip() if isinstance(isp, str) else ""
+
+        if isp_filter and isp_name.lower() != isp_filter.lower():
+            return None
+
+        if not force_active and not self._latest_state(entry.get("stateChanges")):
+            return None
+
+        label = entry.get("description")
+        label_text = label.strip() if isinstance(label, str) else ""
+        description = " · ".join(part for part in (label_text, isp_name) if part)
+
+        return self.parse_entry(ip_value, description=description)
+
+    def parse_hayahora(
+        self,
+        payload: Any,
+        force_active: bool = True,
+        isp_filter: str = "",
+    ) -> list[ParsedTarget]:
+        """Parse the ``{"lastUpdate": ..., "data": [...]}`` HayAHora document."""
+        if not isinstance(payload, dict):
+            return []
+
+        entries = payload.get("data")
+        if not isinstance(entries, list):
+            return []
+
+        filter_value = isp_filter.strip()
+        targets: list[ParsedTarget] = []
+        seen: set[str] = set()
+
+        for entry in entries:
+            target = self._parse_hayahora_entry(entry, force_active, filter_value)
+            if target is None or target.value in seen:
+                continue
+            seen.add(target.value)
+            targets.append(target)
+
+        return targets
+
+    def parse_content(
+        self,
+        text_content: str,
+        feed_format: str = "json",
+        force_active: bool = True,
+        isp_filter: str = "",
+    ) -> list[ParsedTarget]:
         """Parse raw response text into a list of valid ParsedTargets."""
         fmt = feed_format.lower().strip()
         targets: list[ParsedTarget] = []
@@ -77,6 +182,13 @@ class FeedManager:
         except json.JSONDecodeError:
             # Fallback to line-by-line if JSON fails
             return self.parse_content(text_content, feed_format="plaintext")
+
+        # HayAHora / StopLiga live document (format flag or structural auto-detection)
+        is_hayahora = fmt == "hayahora" or (
+            isinstance(data, dict) and isinstance(data.get("data"), list)
+        )
+        if is_hayahora:
+            return self.parse_hayahora(data, force_active=force_active, isp_filter=isp_filter)
 
         if isinstance(data, list):
             for item in data:
@@ -122,8 +234,15 @@ class FeedManager:
         url: str,
         feed_format: str = "json",
         etag: str | None = None,
+        force_active: bool | None = None,
+        isp_filter: str | None = None,
     ) -> tuple[list[ParsedTarget], str | None, bool]:
-        """Download remote feed and parse entries. Returns (targets, new_etag, modified)."""
+        """Download a remote feed and parse entries. Returns (targets, new_etag, modified)."""
+        effective_force_active = (
+            settings.feed_force_active if force_active is None else force_active
+        )
+        effective_isp_filter = settings.feed_isp_filter if isp_filter is None else isp_filter
+
         headers: dict[str, str] = {
             "User-Agent": "TeByPass/0.1.0 (+https://github.com/TSCNEO/tebypass)",
         }
@@ -138,7 +257,12 @@ class FeedManager:
 
                 resp.raise_for_status()
                 new_etag = resp.headers.get("etag")
-                targets = self.parse_content(resp.text, feed_format=feed_format)
+                targets = self.parse_content(
+                    resp.text,
+                    feed_format=feed_format,
+                    force_active=effective_force_active,
+                    isp_filter=effective_isp_filter,
+                )
                 return targets, new_etag, True
             except Exception as ex:
                 logger.error("Failed to fetch feed '%s': %s", url, ex)

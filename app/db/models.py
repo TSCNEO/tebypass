@@ -18,6 +18,34 @@ class Base(DeclarativeBase):
     pass
 
 
+class AppSetting(Base):
+    """Persisted runtime setting (key/value store backing the settings API)."""
+
+    __tablename__ = "app_settings"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_secret: Mapped[bool] = mapped_column(Boolean, default=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class Folder(Base):
+    """User-defined folder / personal list grouping targets."""
+
+    __tablename__ = "folders"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    name: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    color: Mapped[str] = mapped_column(String(16), default="#f59e0b")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    targets: Mapped[list["Target"]] = relationship(
+        "Target", back_populates="folder", passive_deletes=True
+    )
+
+
 class Feed(Base):
     """Remote target feed source."""
 
@@ -46,6 +74,9 @@ class Target(Base):
     feed_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("feeds.id", ondelete="CASCADE"), nullable=True
     )
+    folder_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("folders.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     destination_type: Mapped[str] = mapped_column(String(16), nullable=False)  # 'fqdn' | 'cidr'
     value: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     description: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -53,6 +84,7 @@ class Target(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     feed: Mapped[Feed | None] = relationship("Feed", back_populates="targets")
+    folder: Mapped[Folder | None] = relationship("Folder", back_populates="targets")
     resolved_ips: Mapped[list["ResolvedIP"]] = relationship(
         "ResolvedIP", back_populates="target", cascade="all, delete-orphan"
     )

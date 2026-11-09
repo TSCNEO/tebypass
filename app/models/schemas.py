@@ -17,6 +17,7 @@ class TargetBase(BaseModel):
     )
     description: str | None = Field(default=None, description="Optional administrative note")
     enabled: bool = Field(default=True, description="Whether the target is actively routed")
+    folder_id: str | None = Field(default=None, description="Optional folder / list identifier")
 
 
 class TargetCreate(TargetBase):
@@ -25,13 +26,73 @@ class TargetCreate(TargetBase):
     pass
 
 
+class TargetUpdate(BaseModel):
+    """Partial update payload for an existing target."""
+
+    value: str | None = Field(default=None, description="New FQDN or CIDR value")
+    description: str | None = Field(default=None, description="New administrative note")
+    enabled: bool | None = Field(default=None, description="Enable or disable routing")
+    folder_id: str | None = Field(default=None, description="Folder id, or null to unassign")
+
+
+class BulkTargetImportRequest(BaseModel):
+    """Bulk import payload: one entry per line, comments/blank lines ignored."""
+
+    entries: list[str] = Field(default_factory=list, description="Raw lines to import")
+    folder_id: str | None = Field(default=None, description="Folder assigned to new targets")
+    description: str | None = Field(default=None, description="Shared description override")
+
+
+class BulkTargetImportResponse(BaseModel):
+    """Outcome report of a bulk import operation."""
+
+    created: int
+    skipped: int
+    invalid: list[str] = Field(default_factory=list)
+
+
+class TargetResolveResponse(BaseModel):
+    """Immediate DNS resolution result for a single target."""
+
+    value: str
+    ips: list[str] = Field(default_factory=list)
+
+
 class TargetResponse(TargetBase):
     """Response payload representing a registered target."""
 
     id: str
     feed_id: str | None = None
+    folder_name: str | None = None
     created_at: datetime
     resolved_count: int = 0
+    resolved_ips: list[str] = Field(default_factory=list)
+
+    model_config = {"from_attributes": True}
+
+
+class FolderCreate(BaseModel):
+    """Request payload for creating a folder / personal list."""
+
+    name: str = Field(min_length=1, max_length=128, description="Folder display name")
+    color: str = Field(default="#f59e0b", max_length=16, description="Hex accent color")
+
+
+class FolderUpdate(BaseModel):
+    """Partial update payload for a folder."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=128)
+    color: str | None = Field(default=None, max_length=16)
+
+
+class FolderResponse(BaseModel):
+    """Response payload representing a folder and its target count."""
+
+    id: str
+    name: str
+    color: str
+    targets_count: int = 0
+    created_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 
@@ -114,3 +175,35 @@ class PinVerifyResponse(BaseModel):
 
     success: bool
     token: str | None = None
+
+
+class RouterTestResponse(BaseModel):
+    """Result of an on-demand router driver health probe."""
+
+    healthy: bool
+    driver: str
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
+class WireGuardStatusResponse(BaseModel):
+    """State of the uploaded WireGuard client configuration."""
+
+    configured: bool
+    path: str
+    peers: int = 0
+    uploaded_at: str | None = None
+    preview: str = ""
+
+
+class WireGuardUploadRequest(BaseModel):
+    """Raw wg0.conf content uploaded from the web UI."""
+
+    content: str = Field(description="Full WireGuard configuration text")
+
+
+class WireGuardUploadResponse(BaseModel):
+    """Result of a successful WireGuard configuration upload."""
+
+    configured: bool
+    peers: int
+    uploaded_at: str
