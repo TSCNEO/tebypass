@@ -13,7 +13,7 @@ retira ese fichero dentro del volumen y arranca de nuevo: genera otra clave. Con
 `/data/.secret_key` para descifrar credenciales; no la regeneres para rotar sesiones.
 El API acepta Bearer con la misma clave. El navegador usa cookie firmada de 12 horas.
 
-Guarda copia consistente de SQLite (API backup de sqlite3) junto con `.secret_key`,
+Guarda copia consistente de SQLite (API backup de sqlite3) junto con `gateway_targets.json`, `.secret_key`,
 `admin_token` y `wireguard/wg0.conf`, con acceso restringido. No copies solo el `.db`
 mientras hay escritores sin usar backup o detener el servicio: puede haber datos en WAL.
 
@@ -127,6 +127,7 @@ docker run --rm --cap-add NET_ADMIN -e PYTHONPATH=/ --entrypoint python3 \
 Ese contenedor no comparte el namespace de red del host ni volúmenes de producción.
 Comprueba reglas nft reales, descarte de tráfico seleccionado sin túnel, recorrido normal
 para no seleccionado, fail-open explícito y vaciado del set. No sustituye una prueba con
-clientes LAN y un proveedor WireGuard real.
+clientes LAN y un proveedor WireGuard real. También crea y retira una interfaz WireGuard
+con claves efímeras y parámetros de documentación para comprobar su ciclo de vida.
 
 Base del sidecar: Alpine 3.24, rama con soporte según [el calendario oficial](https://alpinelinux.org/releases/).

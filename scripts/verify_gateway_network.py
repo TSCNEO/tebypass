@@ -2,8 +2,10 @@
 
 import asyncio
 import errno
+import os
 import socket
 import subprocess
+from pathlib import Path
 
 from controller import dispatch, run_command
 from wireguard_runtime import WireGuardRuntime
@@ -39,6 +41,34 @@ async def main() -> None:
     await runtime.policy(True)
     assert (await dispatch({"cmd": "flush"})).get("ok")
     assert (await dispatch({"cmd": "list"})).get("elements") == []
+    private = subprocess.run(
+        ["wg", "genkey"], check=True, capture_output=True, text=True
+    ).stdout.strip()
+    peer_private = subprocess.run(
+        ["wg", "genkey"], check=True, capture_output=True, text=True
+    ).stdout
+    peer_public = subprocess.run(
+        ["wg", "pubkey"], input=peer_private, check=True, capture_output=True, text=True
+    ).stdout.strip()
+    runtime.source = Path("/tmp/wg-candidate.conf")
+    fd = os.open(runtime.source, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as handle:
+        handle.write(
+            f"[Interface]\nPrivateKey = {private}\nAddress = 192.0.2.2/32\n"
+            f"[Peer]\nPublicKey = {peer_public}\nAllowedIPs = 198.51.100.0/24\n"
+            "Endpoint = 203.0.113.7:51820\n"
+        )
+    await runtime.reload()
+    assert Path("/sys/class/net/wg0").exists()
+    checked("ip", "route", "get", "198.51.100.7", "mark", "0x100")
+    runtime.source.unlink()
+    await runtime.reload()
+    assert not Path("/sys/class/net/wg0").exists()
+    unreachable = subprocess.run(
+        ["ip", "route", "get", "198.51.100.7", "mark", "0x100"], capture_output=True
+    )
+    assert unreachable.returncode != 0
+    print("WireGuard lifecycle kernel checks passed: start, route, stop, fail-closed")
     print(
         "Gateway kernel checks passed: selected fail-closed, normal main route, explicit fail-open, flush"
     )

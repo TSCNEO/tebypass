@@ -58,7 +58,9 @@ telemetría. No hay caducidad destructiva automática del snapshot si falla Inte
 Paquetes seleccionados reciben marca `0x100` y usan tabla 100. La ruta por `wg0` tiene
 métrica 10; una ruta unreachable de métrica 32760 evita fallback por la tabla principal
 cuando fail-closed está activo. Tráfico no seleccionado sigue la tabla principal.
-NAT permite usar el sidecar como gateway de clientes LAN. WireGuard se configura con
+Los destinos confirmados se guardan en un checkpoint 0600 y se restauran al reiniciar.
+La cadena forward permanece cerrada durante inicialización y se abre después de restaurar
+el set y la política. NAT permite usar el sidecar como gateway de clientes LAN. WireGuard se configura con
 Table=off, sin hooks ni resolvconf. El controlador serializa comandos de todos los clientes.
 No hay transporte TCP, sidecar remoto ni nft local desde la aplicación en este MVP.
 
