@@ -11,6 +11,7 @@ from typing import Any, Final
 from sqlalchemy import delete, select
 
 from app.core.config import Settings, settings
+from app.core.crypto import decrypt_secret, encrypt_secret
 from app.db.models import AppSetting
 from app.db.session import AsyncSessionLocal
 from app.drivers import invalidate_driver
@@ -124,28 +125,49 @@ def _is_masked_or_empty(key: str, raw: Any) -> bool:
 
 
 async def load_into_settings() -> None:
-    """Read every persisted setting and apply it over the in-memory singleton."""
+    """Read every persisted setting and apply it over the in-memory singleton.
+
+    Secrets stored as legacy plaintext are transparently decrypted and upgraded
+    to authenticated ciphertext in SQLite on the fly.
+    """
+    reencrypt_needed = False
     async with AsyncSessionLocal() as session:
         rows = (await session.execute(select(AppSetting))).scalars().all()
 
-    applied = 0
-    for row in rows:
-        if row.value is None:
-            continue
-        try:
-            value = _coerce(row.key, row.value)
-        except ValueError as ex:
-            logger.warning("Ignoring persisted setting '%s': %s", row.key, ex)
-            continue
-        setattr(settings, row.key, value)
-        applied += 1
+        applied = 0
+        for row in rows:
+            if row.value is None:
+                continue
+
+            raw_val = row.value
+            if row.key in SECRET_KEYS:
+                val_to_use, was_encrypted = decrypt_secret(raw_val)
+                if not was_encrypted and raw_val:
+                    # Auto-upgrade plaintext secret to encrypted in SQLite
+                    row.value = encrypt_secret(val_to_use)
+                    row.is_secret = True
+                    reencrypt_needed = True
+            else:
+                val_to_use = raw_val
+
+            try:
+                value = _coerce(row.key, val_to_use)
+            except ValueError as ex:
+                logger.warning("Ignoring persisted setting '%s': %s", row.key, ex)
+                continue
+            setattr(settings, row.key, value)
+            applied += 1
+
+        if reencrypt_needed:
+            await session.commit()
+            logger.info("Upgraded legacy plaintext secrets to encrypted at rest in SQLite")
 
     invalidate_driver()
     logger.info("Loaded %d persisted settings from SQLite", applied)
 
 
 async def save_settings(payload: dict[str, Any]) -> None:
-    """Validate, persist and hot-apply a batch of settings.
+    """Validate, persist (encrypting secrets) and hot-apply a batch of settings.
 
     Unknown keys are ignored, as are ``None``/empty values and the ``***saved***`` mask so a
     masked secret returned by the API never overwrites the real stored secret.
@@ -166,11 +188,14 @@ async def save_settings(payload: dict[str, Any]) -> None:
         for key, value in updates.items():
             existing = await session.get(AppSetting, key)
             serialized = _serialize(value)
+            is_secret = key in SECRET_KEYS
+            db_value = encrypt_secret(serialized) if is_secret else serialized
+
             if existing is None:
-                session.add(AppSetting(key=key, value=serialized, is_secret=key in SECRET_KEYS))
+                session.add(AppSetting(key=key, value=db_value, is_secret=is_secret))
             else:
-                existing.value = serialized
-                existing.is_secret = key in SECRET_KEYS
+                existing.value = db_value
+                existing.is_secret = is_secret
         await session.commit()
 
     for key, value in updates.items():

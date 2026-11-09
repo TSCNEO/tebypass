@@ -113,7 +113,7 @@ No. No pasan por el túnel, así que te ven con tu IP de siempre. Ese es justame
 Se actualiza solo en el siguiente ciclo: vuelve a resolver los dominios, compara y aplica la diferencia. No tienes que hacer nada.
 
 **¿Dónde se guardan mis credenciales?**
-En tu SQLite local, dentro de tu volumen de datos. No salen de tu máquina, y la API las devuelve enmascaradas cuando las consultas.
+En tu base de datos SQLite local dentro del volumen de datos (`/data/tebypass.db`), **cifradas en reposo con criptografía simétrica autenticada (AES-128-CBC + HMAC-SHA256)** mediante una clave maestra con permisos `0600` en tu volumen. Nunca salen de tu máquina, y la API las devuelve enmascaradas (`***saved***`) cuando las consultas en la web.
 
 **¿Funciona en cualquier red?**
 Sí. Es agnóstico: no hay IPs, DNS ni routers hardcodeados. Todo se configura en la interfaz, y los ejemplos de la documentación usan dominios y rangos reservados por la IETF (RFC 2606 y RFC 5737).

@@ -131,3 +131,66 @@ Construir una imagen sidecar específica (`gateway/`) basada en **Alpine Linux m
   - Desacoplamiento total del ciclo de vida del contenedor web: el gateway puede reiniciarse o actualizarse independientemente.
 - **Negativas / Trade-offs**:
   - Requiere privilegios de red en el contenedor de gateway (`NET_ADMIN` y `/dev/net/tun` o módulo de kernel WireGuard).
+
+---
+
+## ADR-007: Configuración Operativa Persistida en SQLite (`app_settings`) con Hot-Reload frente a Variables de Entorno
+
+### Estado
+**Aceptado**
+
+### Contexto
+Obligar al usuario a editar un archivo `.env` o el `docker-compose.yml` y recrear el contenedor para cambiar el driver del router, una API key, el intervalo de sondeo o activar el bypass de un operador va en contra de la usabilidad del producto homelab. Toda la configuración debe ser modificable desde la propia interfaz web y tener efecto inmediato sin cortes de servicio.
+
+### Decisión
+Trasladar toda la configuración operativa a una tabla `app_settings` en la base de datos SQLite. Los archivos `.env` y `docker-compose.yml` se reservan exclusivamente para las dos variables bootstrap inmutables en tiempo de ejecución: el puerto de escucha (`TEBYPASS_PORT`) y la ruta a la base de datos (`TEBYPASS_DATABASE_URL`). Las modificaciones en la web invalidan en caliente las instancias de drivers y actualizan los intervalos del scheduler sin reiniciar el contenedor.
+
+### Consecuencias
+- **Positivas**:
+  - Experiencia 100% amigable: el usuario gestiona su homelab desde el navegador.
+  - El archivo `docker-compose.yml` queda limpio y neutro, sin credenciales de routers ni URLs de infraestructura.
+- **Negativas / Trade-offs**:
+  - Exige una estrategia rigurosa de enmascarado y cifrado en reposo para credenciales almacenadas en SQLite.
+
+---
+
+## ADR-008: Cifrado Simétrico en Reposo (AES-128-CBC + HMAC-SHA256 Fernet) para Credenciales de Red
+
+### Estado
+**Aceptado**
+
+### Contexto
+A diferencia de las contraseñas de usuarios (que se aseguran con hashes unidireccionales como bcrypt), las API keys de UniFi o contraseñas de MikroTik son secretos de salida que TeByPass debe enviar a los routers para autenticar las peticiones. Si se almacenan como hashes, el valor se destruye y la integración es imposible. Si se almacenan en texto claro en SQLite, una copia de seguridad expone las credenciales de la red.
+
+### Decisión
+Implementar cifrado simétrico autenticado en reposo mediante **Fernet (AES-128-CBC con PKCS7 padding y firma HMAC-SHA256)** para todo registro marcado con `is_secret=True`.
+- La clave maestra se guarda en `/data/.secret_key` con permisos `chmod 600` en el volumen de datos o se deriva opcionalmente de `TEBYPASS_SECRET_KEY`.
+- Todo valor cifrado lleva el prefijo de versión `enc:v1:`.
+- Los secretos existentes en texto claro se detectan en tiempo de carga, se descifran limpiamente y se re-encriptan de manera transparente en la base de datos (migración en caliente con cero tiempo de inactividad).
+
+### Consecuencias
+- **Positivas**:
+  - Máxima seguridad para credenciales de infraestructura en reposo: una filtración del archivo SQLite no compromete los routers.
+  - Compatibilidad total con las necesidades operativas de los drivers (descifrado en memoria sólo cuando se requiere).
+- **Negativas / Trade-offs**:
+  - Si se pierde el archivo `/data/.secret_key` y no se configuró `TEBYPASS_SECRET_KEY`, las credenciales deben reintroducirse en la web.
+
+---
+
+## ADR-009: Licencia GNU Affero General Public License v3 (AGPL-3.0-or-later)
+
+### Estado
+**Aceptado**
+
+### Contexto
+La licencia permisiva MIT original permitía la explotación comercial directa de TeByPass por parte de terceros sin compartir mejoras con la comunidad ni liberar el código fuente de derivados alojados en la nube. Se requería una licencia que protegiera el carácter libre, comunitario y no comercial del proyecto sin impedir el uso y modificación personal.
+
+### Decisión
+Adoptar la **GNU Affero General Public License v3 (AGPL-3.0-or-later)** para el repositorio, el archivo `pyproject.toml` y toda la documentación.
+
+### Consecuencias
+- **Positivas**:
+  - Garantiza que cualquier bifurcación, modificación o servicio alojado en red deba entregar su código fuente íntegro a sus usuarios bajo la misma licencia.
+  - Desincentiva el empaquetado privativo con fines de lucro por parte de empresas comerciales.
+- **Negativas / Trade-offs**:
+  - Incompatible con proyectos o librerías que requieran integración en software propietario cerrado.

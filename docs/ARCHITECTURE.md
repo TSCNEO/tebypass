@@ -94,10 +94,15 @@ sequenceDiagram
 ## 2. Descomposición de Módulos
 
 ### 2.1 Core Engine (`app/core`)
-- `config.py`: Definición tipada de la configuración del sistema mediante `pydantic-settings.BaseSettings`. Lectura de variables `TEBYPASS_*`.
+- `config.py`: Definición tipada de la configuración bootstrap del sistema mediante `pydantic-settings.BaseSettings`. Lectura de variables base (`TEBYPASS_PORT`, `TEBYPASS_DATABASE_URL`).
+- `settings_store.py`: Persistencia en SQLite de la configuración operativa editable desde la interfaz web (driver, credenciales, intervalos, fail-closed, etc.) con hot-reload en memoria.
+- `crypto.py`: Cifrado y descifrado simétrico autenticado (Fernet / AES-128-CBC + HMAC-SHA256) para proteger secretos en reposo en la base de datos SQLite.
 - `resolver.py`: Servicio asíncrono de resolución DNS. Utiliza `asyncio.get_running_loop().getaddrinfo` para apoyarse en la pila nativa del sistema operativo (`libc`).
 - `cache.py`: Almacén en memoria de resoluciones con lógica de ventana deslizante. Extiende el TTL de rutas dinámicas si se detecta actividad continua.
 - `feeds.py`: Clientes HTTP asíncronos (`httpx.AsyncClient`) para descarga e interpretación de feeds (StopLiga, HayAHora, texto plano).
+- `feeds_sync.py`: Tareas de sincronización y refresco no destructivo de feeds remotos respetando cabeceras `ETag` e `If-Modified-Since`.
+- `bootstrap.py`: Inicialización de semillas en SQLite (alta inicial del feed comunitario desactivado por defecto).
+- `version.py`: Detección dinámica del commit de Git en Python puro desde `.git` montado en modo lectura, sin binarios externos.
 - `engine.py`: Orquestador principal que ejecuta el bucle de sincronización, invoca la resolución, compara el estado deseado contra el estado del router y llama al driver.
 
 ### 2.2 Capa de Base de Datos (`app/db`)
@@ -204,6 +209,12 @@ erDiagram
     FEEDS ||--o{ TARGETS : "contiene"
     TARGETS ||--o{ RESOLVED_IPS : "resuelve_a"
     SYNC_EVENTS ||--o{ AUDIT_LOGS : "genera"
+    APP_SETTINGS {
+        string key PK
+        string value "cifrado si is_secret=True"
+        boolean is_secret
+        datetime updated_at
+    }
 
     FEEDS {
         string id PK
@@ -296,7 +307,19 @@ En un despliegue con el Sidecar Gateway (`gateway/`), el flujo de paquetes es es
 
 ## 6. Modelo de Seguridad
 
-1. **PIN Maestro**: Toda mutación de estado (añadir targets, forzar sincronización, modificar feeds) requiere validación de un PIN maestro configurado mediante `TEBYPASS_MASTER_PIN_HASH` (almacenado con hash SHA-256 con salt o bcrypt).
-2. **Cookies de Sesión HMAC**: Al validar el PIN, se expide una cookie de sesión cifrada/firmada mediante HMAC-SHA256 con expiración acotada (`TEBYPASS_SECRET_KEY`).
-3. **Rate Limiting**: Los endpoints de sincronización y autenticación cuentan con limitación de tasa (rate limiting) para prevenir ataques de denegación de servicio.
-4. **Validación Estricta de Entradas**: Todos los valores de FQDNs y CIDRs se validan mediante Pydantic y el módulo estándar `ipaddress`, rechazando inyecciones de comandos, secuencias de escape y rangos inválidos.
+1. **Cifrado en Reposo de Secretos (AES-128-CBC + HMAC-SHA256 Fernet)**:
+   - Todas las credenciales sensibles (`unifi_api_key`, `unifi_password`, `mikrotik_password`) se cifran mediante criptografía simétrica autenticada antes de guardarse en SQLite.
+   - La clave maestra reside en `/data/.secret_key` con permisos restringidos `0o600` en el volumen de datos (o derivada de `TEBYPASS_SECRET_KEY`).
+   - Si la base de datos es respaldada o extraída, los secretos son ilegibles sin la clave maestra.
+   - Migración transparente: cualquier secreto legado en texto plano se descifra y se re-encripta automáticamente en la primera lectura.
+2. **Enmascarado Estricto de API y UI**:
+   - Los endpoints `GET /settings` devuelven la máscara `***saved***` para todo secreto configurado. Ni la UI ni el tráfico HTTP exponen nunca las claves en claro ni los tokens cifrados.
+   - Las mutaciones `PUT /settings` respetan la máscara: enviar `***saved***` no destruye el secreto existente.
+3. **Control de Acceso y Sesión**:
+   - Soporte para PIN Maestro opcional (`TEBYPASS_MASTER_PIN_HASH` con hash unidireccional y sal) para restringir cambios críticos.
+   - Cookies de sesión firmadas con HMAC-SHA256 y expiración acotada.
+4. **Protección de Archivos de Túnel (WireGuard)**:
+   - El archivo de configuración de WireGuard `/data/wireguard/wg0.conf` se almacena con permisos `0o600`, impidiendo lecturas no privilegiadas en el host.
+5. **Rate Limiting y Validación Estricta**:
+   - Endpoints de autenticación y sincronización protegidos contra fuerza bruta.
+   - Validación rigurosa de dominios y prefijos IP con `ipaddress` y Pydantic para prevenir inyecciones de comandos en drivers o shells de red.
