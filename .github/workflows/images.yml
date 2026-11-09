@@ -200,5 +200,7 @@ jobs:
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" dist/release/* dist/release/.env.example --clobber
           else
-            gh release create "$RELEASE_TAG" dist/release/* dist/release/.env.example --verify-tag --draft --title "TeByPass $RELEASE_TAG" --notes-file docs/RELEASE_NOTES.md
+            flags=(--draft)
+            if [[ "$RELEASE_TAG" == *-* ]]; then flags+=(--prerelease); fi
+            gh release create "$RELEASE_TAG" dist/release/* dist/release/.env.example --verify-tag "${flags[@]}" --title "TeByPass $RELEASE_TAG" --notes-file docs/RELEASE_NOTES.md
           fi
