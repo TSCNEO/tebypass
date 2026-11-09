@@ -134,6 +134,41 @@ async def test_list_targets_returns_only_unexpired_resolved_ips(
 
 
 @pytest.mark.asyncio
+async def test_create_target_resolves_immediately(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Creating an FQDN target immediately triggers DNS resolution and populates resolved_ips."""
+    from app.core.cache import CachedResolution
+
+    now = datetime.now(UTC)
+    fake_resolution = [
+        CachedResolution(
+            fqdn="example.com",
+            ip_address="198.51.100.42",
+            cidr="198.51.100.42/32",
+            first_seen_at=now,
+            last_seen_at=now,
+            expires_at=now + timedelta(hours=1),
+            dns_ttl=3600,
+        )
+    ]
+
+    async def fake_resolve(self: Any, fqdn: str, **kwargs: Any) -> list[CachedResolution]:
+        return fake_resolution
+
+    monkeypatch.setattr("app.core.resolver.NativeDNSResolver.resolve_fqdn", fake_resolve)
+
+    response = await client.post(
+        "/api/v1/targets",
+        json={"value": "example.com", "description": "Immediate resolution test", "enabled": True},
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["resolved_count"] == 1
+    assert data["resolved_ips"] == ["198.51.100.42"]
+
+
+@pytest.mark.asyncio
 async def test_resolve_endpoint_returns_cidr_for_cidr_target(client: httpx.AsyncClient) -> None:
     """A CIDR target resolves to itself without touching DNS."""
     created = await _create_target(client, value="192.0.2.0/24")

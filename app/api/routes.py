@@ -1,5 +1,6 @@
 """Target management and route synchronization endpoints."""
 
+import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -28,11 +29,68 @@ from app.models.schemas import (
 )
 
 router = APIRouter(prefix="/api/v1", tags=["Routes"])
+logger = logging.getLogger(__name__)
 
 _TARGET_LOAD_OPTIONS = (
     selectinload(Target.resolved_ips),
     selectinload(Target.folder),
 )
+
+
+async def _resolve_and_persist(db: AsyncSession, target: Target) -> list[str]:
+    """Resolve an FQDN target immediately and persist ResolvedIP records in SQLite."""
+    if target.destination_type != "fqdn":
+        return []
+    cache = SlidingWindowCache(default_window_seconds=settings.sliding_window_seconds)
+    resolver = NativeDNSResolver(cache=cache)
+    try:
+        resolutions = await resolver.resolve_fqdn(
+            target.value,
+            window_extension_seconds=settings.sliding_window_seconds,
+        )
+    except Exception as ex:
+        logger.warning("Immediate resolution failed for '%s': %s", target.value, ex)
+        return []
+
+    now = datetime.now(UTC)
+    for resolution in resolutions:
+        lookup = select(ResolvedIP).where(
+            ResolvedIP.target_id == target.id,
+            ResolvedIP.ip_address == resolution.ip_address,
+        )
+        stored = (await db.execute(lookup)).scalar_one_or_none()
+        if stored is None:
+            db.add(
+                ResolvedIP(
+                    target_id=target.id,
+                    ip_address=resolution.ip_address,
+                    cidr=resolution.cidr,
+                    first_seen_at=now,
+                    last_seen_at=now,
+                    expires_at=resolution.expires_at,
+                    ttl_seconds=resolution.dns_ttl,
+                )
+            )
+        else:
+            stored.last_seen_at = now
+            stored.expires_at = resolution.expires_at
+            stored.ttl_seconds = resolution.dns_ttl
+
+    if resolutions:
+        await db.commit()
+    return sorted({r.ip_address for r in resolutions})
+
+
+async def _trigger_background_reconciliation() -> None:
+    """Best-effort trigger to immediately push changes to router or gateway."""
+    try:
+        driver = get_driver()
+        cache = SlidingWindowCache(default_window_seconds=settings.sliding_window_seconds)
+        resolver = NativeDNSResolver(cache=cache)
+        engine = ReconciliationEngine(driver=driver, cache=cache, resolver=resolver)
+        await engine.reconcile(force=False)
+    except Exception as ex:
+        logger.warning("Auto-reconciliation after target change failed: %s", ex)
 
 
 def _active_ips(target: Target, now: datetime | None = None) -> list[str]:
@@ -108,6 +166,10 @@ async def create_target(
     db.add(target)
     await db.commit()
 
+    if target.enabled and target.destination_type == "fqdn":
+        await _resolve_and_persist(db, target)
+        await _trigger_background_reconciliation()
+
     loaded = await _load_target(db, target.id)
     return _to_response(loaded)
 
@@ -142,6 +204,11 @@ async def update_target(
         target.folder_id = folder_id
 
     await db.commit()
+
+    if target.enabled and target.destination_type == "fqdn":
+        await _resolve_and_persist(db, target)
+        await _trigger_background_reconciliation()
+
     loaded = await _load_target(db, target_id)
     return _to_response(loaded)
 
@@ -211,6 +278,14 @@ async def bulk_import_targets(
 
     if created:
         await db.commit()
+        # Resolve any newly imported enabled FQDN targets immediately
+        fqdn_query = select(Target).where(
+            Target.enabled == True,  # noqa: E712
+            Target.destination_type == "fqdn",
+        )
+        for t in (await db.execute(fqdn_query)).scalars().all():
+            await _resolve_and_persist(db, t)
+        await _trigger_background_reconciliation()
 
     return BulkTargetImportResponse(created=created, skipped=skipped, invalid=invalid)
 
@@ -226,43 +301,12 @@ async def resolve_target_now(
     if target.destination_type != "fqdn":
         return TargetResolveResponse(value=target.value, ips=[target.value])
 
-    cache = SlidingWindowCache(default_window_seconds=settings.sliding_window_seconds)
-    resolver = NativeDNSResolver(cache=cache)
-    resolutions = await resolver.resolve_fqdn(
-        target.value,
-        window_extension_seconds=settings.sliding_window_seconds,
-    )
-
-    now = datetime.now(UTC)
-    for resolution in resolutions:
-        lookup = select(ResolvedIP).where(
-            ResolvedIP.target_id == target.id,
-            ResolvedIP.ip_address == resolution.ip_address,
-        )
-        stored = (await db.execute(lookup)).scalar_one_or_none()
-        if stored is None:
-            db.add(
-                ResolvedIP(
-                    target_id=target.id,
-                    ip_address=resolution.ip_address,
-                    cidr=resolution.cidr,
-                    first_seen_at=now,
-                    last_seen_at=now,
-                    expires_at=resolution.expires_at,
-                    ttl_seconds=resolution.dns_ttl,
-                )
-            )
-        else:
-            stored.last_seen_at = now
-            stored.expires_at = resolution.expires_at
-            stored.ttl_seconds = resolution.dns_ttl
-
-    if resolutions:
-        await db.commit()
+    ips = await _resolve_and_persist(db, target)
+    await _trigger_background_reconciliation()
 
     return TargetResolveResponse(
         value=target.value,
-        ips=sorted({resolution.ip_address for resolution in resolutions}),
+        ips=ips,
     )
 
 
