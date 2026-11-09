@@ -15,6 +15,13 @@ el aislamiento de SyncEvent entre pruebas. Usar un basetemp corto para sockets e
 Pruebas HTTP de lectura del despliegue existente: panel, liveness, versión, estado y
 OpenAPI responden HTTP 200. No se almacenan datos privados del entorno en el repositorio.
 
+Desplegado por SSH con Docker Compose, tras copia consistente de SQLite y conservación de
+la imagen anterior. Contenedor en ejecución y healthy; panel/API operativos y sonda UniFi
+correcta. Cuatro comprobaciones adicionales dentro de la imagen desplegada verifican los
+rechazos de drivers sin configuración/implementación y el protocolo de teardown, usando
+transporte simulado para evitar modificar reglas reales. El apagado de una regla real
+queda pendiente de una prueba operativa controlada; no se acredita mediante esas sondas.
+
 Pendiente: contrato completo de políticas, transición de configuración y telemetría
 observada; no se consideran resueltos por serializar las escrituras. Continúan en las
 siguientes fases del plan de auditoría.
