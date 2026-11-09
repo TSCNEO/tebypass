@@ -20,13 +20,34 @@ pausa y estado de las rutas.
 La compatibilidad depende de las capacidades y configuración del equipo;
 [consulta los requisitos](docs/INSTALLATION.md#requisitos-por-driver).
 
-## Instalación
+## Instalación con un LLM
 
-Requiere Docker Engine y Docker Compose v2. La
-[guía de instalación](docs/INSTALLATION.md) explica la elección de driver, el acceso,
-la configuración y la comprobación desde un cliente.
+Para que un asistente lo monte, copia y pega este encargo en tu LLM. Si puede ejecutar
+comandos en el servidor, podrá realizar el despliegue; si no, te guiará paso a paso:
 
-Mientras no haya una release pública, se puede compilar desde el código:
+> Quiero que instales y configures TeByPass en mi entorno. Lee README.md y
+> docs/LLM_DEPLOYMENT.md del repositorio https://github.com/TSCNEO/tebypass.
+> Antes de ejecutar nada, pregúntame qué router y modelo tengo, dónde quiero instalarlo,
+> si tengo Docker y una VPN preparada, qué dispositivos quiero usar y cómo accederé al panel.
+> Sigue la entrevista por etapas y elige conmigo el driver. Instala solo los componentes
+> necesarios: con un router compatible y salida preparada no levantes el gateway virtual.
+> Conserva cualquier instalación existente, configura la salida y comprueba el tráfico
+> desde un cliente. No pidas secretos en el chat; indícame dónde introducirlos de forma
+> segura. Al terminar, explica cómo acceder, actualizar, hacer copias y revertir los cambios.
+
+[Protocolo completo para el asistente](docs/LLM_DEPLOYMENT.md).
+
+## Instalación manual rápida
+
+1. **Elige el driver** con la tabla anterior y revisa sus
+   [requisitos](docs/INSTALLATION.md#requisitos-por-driver). Para un router compatible,
+   prepara su VPN/salida y el acceso API. Para gateway virtual, completa primero la
+   [preparación LAN](docs/OPERATIONS.md#gateway-virtual-despliegue-en-la-lan).
+2. **Prepara el servidor:** instala Docker Engine, Docker Compose v2 y Git para compilar.
+   Los comandos siguientes arrancan solo la aplicación; la
+   [guía de instalación](docs/INSTALLATION.md) incluye el arranque específico del gateway
+   y la alternativa con imágenes de release cuando estén publicadas.
+3. **Descarga y arranca** desde el código:
 
 ```sh
 git clone https://github.com/TSCNEO/tebypass.git
@@ -34,28 +55,24 @@ cd tebypass
 TEBYPASS_GIT_COMMIT=$(git rev-parse HEAD) docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build --wait tebypass
 ```
 
-Abre `http://<servidor>:9384` y consulta localmente la clave de acceso:
+4. **Accede:** abre `http://<servidor>:9384`, consulta la clave localmente con el comando
+   siguiente e introdúcela en la pantalla de acceso. No la compartas.
 
 ```sh
 docker compose exec tebypass cat /data/admin_token
 ```
 
-En **Ajustes**, selecciona el driver, configura la salida y prueba la conexión.
-La fuente inicial está pausada; actívala después de comprobar la configuración.
+5. **Configura:** en **Ajustes**, selecciona el driver, completa sus campos, elige la
+   salida y pulsa **Probar conexión**. Con gateway virtual, arranca también su perfil
+   según la guía y sube WireGuard desde el panel.
+6. **Comprueba:** añade un destino de prueba controlado, sincroniza y verifica desde un
+   cliente que usa la salida elegida. Comprueba también que el tráfico no seleccionado
+   mantiene su salida habitual y que pausar retira el desvío.
+7. **Activa las fuentes deseadas:** la fuente inicial está pausada. Actívala después de
+   validar la salida y prepara una [copia de seguridad](docs/OPERATIONS.md#acceso-y-secretos).
+
 Para las siguientes operaciones de una instalación compilada se deben conservar ambos
-archivos Compose. [Actualización y copias](docs/OPERATIONS.md).
-
-## Instalación con un LLM
-
-Copia este encargo en un asistente con acceso al servidor o capacidad para guiar los pasos:
-
-> Quiero desplegar TeByPass. Lee README.md y docs/LLM_DEPLOYMENT.md del repositorio
-> https://github.com/TSCNEO/tebypass. Sigue su entrevista por etapas: pregunta primero
-> qué router tengo, dónde se ejecutará y si ya existe una VPN. Elige conmigo el driver
-> antes de desplegar. Usa solo los componentes necesarios, conserva cualquier instalación
-> existente y verifica el tráfico desde un cliente. No pidas secretos en el chat.
-
-[Protocolo completo para el asistente](docs/LLM_DEPLOYMENT.md).
+archivos Compose. Consulta [actualización y copias](docs/OPERATIONS.md).
 
 ## Alcance
 
