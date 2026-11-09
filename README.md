@@ -59,20 +59,16 @@ Configura el driver desde Ajustes y pulsa Probar conexión. El feed inicial est�
 actívalo cuando hayas elegido la salida. Crear una VPN, obtener credenciales del proveedor
 VPN y preparar las políticas base del router corresponde al administrador.
 
-Para Traefik u otro proxy HTTPS, ejecuta **en el servidor, dentro del repositorio**:
+**Traefik y otros proxies HTTPS:** abre el panel e inicia sesión. El navegador comunica
+su URL y la sesión la reconoce automáticamente; no necesitas indicar el servidor,
+configurar IPs de proxies ni ejecutar comandos adicionales. El proxy debe conservar
+`Host` y dirigir el tráfico al puerto interno 9384. Certificado y ruta del proxy se
+preparan en el propio proxy. Si tenías una sesión antigua, vuelve a entrar una vez.
+Consulta la [guía operativa](docs/OPERATIONS.md#traefik-y-otros-proxies-https) o la
+[guía para LLM](docs/LLM_DEPLOYMENT.md).
 
-```sh
-python3 scripts/setup_proxy.py 'https://tebypass.example.org' --apply
-```
-
-Sustituye solo la URL por la que usas para abrir el panel. El asistente detecta la conexión
-del proxy, guarda una copia y verifica el cambio; no pide IPs internas ni credenciales.
-Consulta la [guía operativa](docs/OPERATIONS.md#traefik-y-otros-proxies-https) o entrega a tu
-LLM la [guía de instalación asistida](docs/LLM_DEPLOYMENT.md).
-
-Puerto, ubicación de BD y confianza del proxy son bootstrap. Credenciales, fuentes,
-intervalos, horarios y comportamiento se guardan desde la web. Las opciones de macvlan
-son parámetros Docker.
+Puerto y ubicación de BD son bootstrap. Credenciales, fuentes, intervalos, horarios y
+comportamiento se guardan desde la web. Las opciones de macvlan son parámetros Docker.
 La dirección de escucha interna del contenedor permanece en 9384 aunque personalices el
 puerto publicado con `TEBYPASS_PORT` en `.env`.
 

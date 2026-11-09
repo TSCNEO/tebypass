@@ -314,3 +314,20 @@ recrea exclusivamente la aplicación y verifica. Si falla restaura la configurac
 recrea de nuevo, informando si la recuperación falla. No usa credenciales administrativas
 ni habilita confianza global. Login y errores de guardado ofrecen instrucciones para
 usuario o LLM. No configura certificados ni crea rutas del proxy: estos deben existir.
+
+## ADR-016: Origen externo reconocido durante el login
+
+**Aceptado; sustituye el requisito de configuración del proxy para usar la web de ADR-014/015.**
+El formulario envía location.origin junto con la clave. Tras autenticar, se valida contra
+Origin y la autoridad Host conservada por el proxy. Se firma dentro de una sesión v2 con
+caducidad; no se registra globalmente ni se confía en cabeceras reenviadas de cualquier
+cliente. Una visita anónima no configura nada. Cada escritura exige el mismo origen
+completo, y HTTPS obtiene cookie Secure incluso sobre un salto interno HTTP.
+
+Esto evita comandos o cambios bootstrap para navegar/guardar detrás de Traefik y admite
+varios accesos con sesiones independientes. No altera TLS ni la configuración del proxy.
+Los clientes API sin browser_origin conservan el formato previo; los agentes usan Bearer.
+Las cookies anteriores siguen con su validación previa y se renuevan iniciando sesión.
+El asistente de ADR-015 queda opcional para metadatos reenviados de conexión de Uvicorn.
+La aplicación no obtiene acceso al socket Docker. Protección de origen basada en
+[OWASP CSRF Prevention](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html).

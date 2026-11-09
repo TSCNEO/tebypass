@@ -1,7 +1,6 @@
 """Authentication HTTP boundary and administrator middleware."""
 
 import hmac
-import time
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -11,38 +10,17 @@ from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import Response
 
-from app.core.auth import COOKIE, SESSION_SECONDS, admin_token, session_valid, sign
+from app.api.origins import browser_login_origin, normalized_origin, same_origin
+from app.core.auth import (
+    COOKIE,
+    SESSION_SECONDS,
+    admin_token,
+    issue_session,
+    session_origin,
+    session_valid,
+)
 
 router = APIRouter(tags=["Authentication"])
-
-
-def same_origin(origin: str, request: Request) -> bool:
-    """Compare browser origin to the effective URL set by the trusted proxy layer."""
-    try:
-        parsed = urlsplit(origin)
-        if (
-            parsed.scheme not in {"http", "https"}
-            or not parsed.hostname
-            or parsed.username is not None
-            or parsed.password is not None
-            or parsed.path not in {"", "/"}
-            or parsed.query
-            or parsed.fragment
-        ):
-            return False
-        effective = request.url
-        defaults = {"http": 80, "https": 443}
-        return (
-            parsed.scheme,
-            parsed.hostname,
-            parsed.port if parsed.port is not None else defaults[parsed.scheme],
-        ) == (
-            effective.scheme,
-            effective.hostname,
-            effective.port if effective.port is not None else defaults.get(effective.scheme),
-        )
-    except ValueError:
-        return False
 
 
 class AdminMiddleware(BaseHTTPMiddleware):
@@ -62,7 +40,13 @@ class AdminMiddleware(BaseHTTPMiddleware):
             return JSONResponse({"detail": "Authentication required"}, status_code=401)
         if not token_ok and request.method not in {"GET", "HEAD", "OPTIONS"}:
             origin = request.headers.get("origin")
-            if origin and not same_origin(origin, request):
+            bound_origin = session_origin(request.cookies.get(COOKIE, ""))
+            if bound_origin is not None:
+                if normalized_origin(origin or "") != bound_origin:
+                    return JSONResponse(
+                        {"detail": "Cross-origin request rejected"}, status_code=403
+                    )
+            elif origin and not same_origin(origin, request):
                 try:
                     parsed = urlsplit(origin)
                 except ValueError:
@@ -77,7 +61,7 @@ class AdminMiddleware(BaseHTTPMiddleware):
                     return JSONResponse(
                         {
                             "code": "proxy_setup_required",
-                            "detail": "El servidor no reconoce el HTTPS del proxy. Ejecuta el asistente de acceso del servidor.",
+                            "detail": "Vuelve a iniciar sesión para reconocer automáticamente la dirección del panel.",
                         },
                         status_code=403,
                     )
@@ -90,20 +74,28 @@ class AdminMiddleware(BaseHTTPMiddleware):
 
 class LoginRequest(BaseModel):
     token: str = Field(min_length=16, max_length=512)
+    browser_origin: str | None = Field(default=None, max_length=2048)
 
 
 @router.post("/auth/session")
 async def login(payload: LoginRequest, request: Request) -> Response:
     if not hmac.compare_digest(payload.token, admin_token()):
         raise HTTPException(status_code=401, detail="Invalid administrator credential")
-    stamp = str(int(time.time()))
+    origin = None
+    if payload.browser_origin is not None:
+        origin = browser_login_origin(payload.browser_origin, request)
+        if origin is None:
+            raise HTTPException(
+                status_code=403,
+                detail="El origen del navegador no coincide con el acceso al panel.",
+            )
     response = JSONResponse({"success": True})
     response.set_cookie(
         COOKIE,
-        stamp + "." + sign(stamp),
+        issue_session(origin),
         httponly=True,
         samesite="strict",
-        secure=request.url.scheme == "https",
+        secure=(origin or str(request.url)).startswith("https://"),
         max_age=SESSION_SECONDS,
     )
     return response

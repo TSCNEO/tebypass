@@ -67,7 +67,10 @@ No hay transporte TCP, sidecar remoto ni nft local desde la aplicación en este 
 ## Seguridad y salud
 
 Clave de administración aleatoria en el volumen, modo 0600; API Bearer y sesiones firmadas
-HttpOnly/SameSite. No hay CORS abierto. Credenciales de router cifradas con Fernet;
+HttpOnly/SameSite. El login web valida y firma el origen externo comunicado por el
+navegador contra Origin y Host. Las escrituras con esas sesiones exigen el origen firmado;
+HTTPS emite cookie Secure sin depender de la confianza de cabeceras del proxy. No hay
+registro global por primera visita ni acceso Docker desde la aplicación. No hay CORS abierto. Credenciales de router cifradas con Fernet;
 una clave ausente se crea con permisos restrictivos, y una clave inválida o imposible de
 persistir provoca error explícito. Guardar la BD sin su clave no permite recuperar secretos.
 

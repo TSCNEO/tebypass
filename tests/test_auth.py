@@ -124,3 +124,133 @@ async def test_proxy_mismatch_gives_actionable_guidance(db_ready: None) -> None:
             "/api/v1/settings", json={}, headers={"Origin": "https://[invalid"}
         )
         assert response.status_code == 403
+
+
+async def test_browser_origin_works_without_proxy_trust(db_ready: None) -> None:
+    from starlette.types import Receive, Scope, Send
+
+    async def internal_http(scope: Scope, receive: Receive, send: Send) -> None:
+        scope["scheme"] = "http"
+        await app(scope, receive, send)
+
+    origin = "https://tebypass.example.org:8443"
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(internal_http), base_url=origin
+    ) as client:
+        response = await client.post(
+            "/auth/session",
+            json={"token": admin_token(), "browser_origin": origin},
+            headers={"Origin": origin, "X-Forwarded-Proto": "http"},
+        )
+        assert response.status_code == 200
+        assert "Secure" in response.headers["set-cookie"]
+        assert "HttpOnly" in response.headers["set-cookie"]
+        assert (await client.get("/api/v1/settings")).status_code == 200
+        response = await client.put("/api/v1/settings", json={}, headers={"Origin": origin})
+        assert response.status_code == 200
+        for invalid in (
+            "https://other.example.org:8443",
+            "https://tebypass.example.org",
+            "http://tebypass.example.org:8443",
+            "null",
+            "https://[invalid",
+        ):
+            response = await client.put("/api/v1/settings", json={}, headers={"Origin": invalid})
+            assert response.status_code == 403
+        assert (await client.put("/api/v1/settings", json={})).status_code == 403
+        assert (await client.delete("/auth/session", headers={"Origin": origin})).status_code == 200
+        assert (await client.get("/api/v1/settings")).status_code == 401
+
+
+async def test_browser_login_rejects_unproven_origin(db_ready: None) -> None:
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app), base_url="http://tebypass.example.org"
+    ) as client:
+        for claimed, header in (
+            ("https://other.example.org", "https://other.example.org"),
+            ("https://tebypass.example.org", "https://other.example.org"),
+            ("https://tebypass.example.org", ""),
+            ("https://tebypass.example.org:8443", "https://tebypass.example.org:8443"),
+            ("https://tebypass.example.org/path", "https://tebypass.example.org/path"),
+        ):
+            response = await client.post(
+                "/auth/session",
+                json={"token": admin_token(), "browser_origin": claimed},
+                headers={"Origin": header, "X-Forwarded-Host": "other.example.org"},
+            )
+            assert response.status_code == 403
+            assert "set-cookie" not in response.headers
+        response = await client.post(
+            "/auth/session",
+            json={
+                "token": "invalid-token-with-enough-characters",
+                "browser_origin": "http://tebypass.example.org",
+            },
+            headers={"Origin": "http://tebypass.example.org"},
+        )
+        assert response.status_code == 401
+        response = await client.post(
+            "/auth/session",
+            json={"token": admin_token(), "browser_origin": "http://tebypass.example.org"},
+            headers={"Origin": "http://tebypass.example.org"},
+        )
+        assert response.status_code == 200
+        assert "Secure" not in response.headers["set-cookie"]
+        assert (
+            await client.put(
+                "/api/v1/settings", json={}, headers={"Origin": "http://tebypass.example.org"}
+            )
+        ).status_code == 200
+
+
+def test_origin_bound_session_tampering_and_expiry() -> None:
+    from unittest.mock import patch
+
+    from app.core.auth import issue_session, session_origin
+
+    session = issue_session("https://tebypass.example.org")
+    assert session_valid(session)
+    assert session_origin(session) == "https://tebypass.example.org"
+    assert not session_valid(session + "tampered")
+    assert session_origin(session + "tampered") is None
+    assert session_origin(issue_session()) is None
+    with patch("app.core.auth.time.time", return_value=0):
+        expired = issue_session("https://tebypass.example.org")
+    assert not session_valid(expired)
+    assert session_origin(expired) is None
+
+
+async def test_browser_sessions_allow_independent_entry_points(db_ready: None) -> None:
+    from starlette.types import Receive, Scope, Send
+
+    async def internal_http(scope: Scope, receive: Receive, send: Send) -> None:
+        scope["scheme"] = "http"
+        await app(scope, receive, send)
+
+    for origin in ("https://tebypass.example.org", "http://192.0.2.20:9384"):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(internal_http), base_url=origin
+        ) as client:
+            response = await client.post(
+                "/auth/session",
+                json={"token": admin_token(), "browser_origin": origin},
+                headers={"Origin": origin},
+            )
+            assert response.status_code == 200
+            response = await client.put("/api/v1/settings", json={}, headers={"Origin": origin})
+            assert response.status_code == 200
+
+
+def test_origin_normalization_handles_ipv6_and_default_ports() -> None:
+    from app.api.origins import normalized_origin
+
+    assert normalized_origin("https://tebypass.example.org:443") == "https://tebypass.example.org"
+    assert normalized_origin("http://[2001:db8::1]:9384") == "http://[2001:db8::1]:9384"
+    assert normalized_origin("https://tebypass.example.org:0") == "https://tebypass.example.org:0"
+    for invalid in (
+        "null",
+        "https://[invalid",
+        "https://user@tebypass.example.org",
+        "https://tebypass.example.org:bad",
+    ):
+        assert normalized_origin(invalid) is None

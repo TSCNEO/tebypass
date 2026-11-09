@@ -111,11 +111,9 @@
       <span x-show="feed && feed.last_error" class="text-red-400" x-text="feed ? feed.last_error : ''"></span>
     </div>
     <section x-show="proxySetupNeeded" class="panel rounded-md p-4 text-sm border-amber-600" role="alert">
-      <p class="text-amber-300">Hay que completar el acceso HTTPS del proxy.</p>
-      <p class="text-xs text-slate-400 mt-2">Ejecuta este comando en la carpeta del proyecto del servidor, o pásaselo a tu LLM con acceso a Docker. El asistente detecta la conexión y verifica el cambio.</p>
-      <code class="block mono text-xs break-all mt-3" x-text="proxySetupCommand()"></code>
-      <button class="btn btn-primary rounded px-3 py-2 mt-3 text-xs" @click="navigator.clipboard.writeText(proxySetupCommand()); toast('Comando copiado')">Copiar comando</button>
-      <a class="ml-3 text-xs text-amber-400 underline" href="/login">Ayuda de instalación</a>
+      <p class="text-amber-300">Actualiza la sesión para reconocer esta dirección.</p>
+      <p class="text-xs text-slate-400 mt-2">Vuelve a entrar con tu clave. El acceso por HTTPS se configura automáticamente para tu sesión.</p>
+      <a class="btn btn-primary inline-block rounded px-3 py-2 mt-3 text-xs" href="/login">Iniciar sesión de nuevo</a>
     </section>
     <!-- ===================== FEED COMUNITARIO ===================== -->
     <section class="panel rounded-lg overflow-hidden">
@@ -644,11 +642,6 @@ function tebypass() {
       await Promise.all([this.loadStatus(), this.loadTargets(), this.loadFolders(), this.loadFeeds(), this.loadSettings(), this.loadWg()]);
       this.settingsLoaded = true;
       setInterval(() => this.loadStatus(), 20000);
-    },
-
-    proxySetupCommand() {
-      const quoted = "'" + window.location.origin.replaceAll("'", "'\\''") + "'";
-      return 'python3 scripts/setup_proxy.py ' + quoted + ' --apply';
     },
 
     async api(method, path, body) {
