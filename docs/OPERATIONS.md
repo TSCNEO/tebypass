@@ -131,3 +131,34 @@ clientes LAN y un proveedor WireGuard real. También crea y retira una interfaz 
 con claves efímeras y parámetros de documentación para comprobar su ciclo de vida.
 
 Base del sidecar: Alpine 3.24, rama con soporte según [el calendario oficial](https://alpinelinux.org/releases/).
+
+## Un cliente usa el gateway pero no navega
+
+Configura como puerta de enlace la **IP LAN propia del contenedor**. Puedes consultarla
+sin confundirla con la dirección del servidor del panel:
+
+```sh
+docker inspect tebypass-gateway --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'
+```
+
+El cliente necesita además IP libre y máscara correctas, y un DNS accesible (por ejemplo,
+el DNS habitual del router). El gateway no ejecuta un servidor DNS: usar su IP como DNS
+no funciona salvo que se añada un servicio DNS externo expresamente. Desactiva datos
+móviles durante la prueba y verifica que el Wi-Fi permita alcanzar otros equipos LAN
+(red de invitados/aislamiento de clientes puede impedirlo).
+
+Seleccionar `virtual_gateway` en Ajustes dirige los destinos administrados al sidecar.
+Usar su IP como gateway del cliente solo cambia el recorrido del cliente: no cambia el
+driver del motor. Con el driver UniFi seleccionado el sidecar no recibe sus destinos.
+Sin destinos seleccionados, el gateway debe seguir reenviando tráfico por la salida normal.
+
+Una conexión HTTP desde el contenedor no acredita el reenvío de clientes. La prueba
+adicional de CI crea una LAN Docker aislada, un cliente y un endpoint DNS/HTTP de laboratorio:
+
+```sh
+python scripts/verify_gateway_forwarding.py --image tebypass-gateway:verify
+```
+
+Comprueba tráfico que entra y sale por la misma interfaz, vuelta por NAT, DNS, HTTP,
+fail-closed para el destino seleccionado y recuperación al retirarlo. Se eliminan los
+contenedores y la red de prueba; no modifica la LAN ni usa volúmenes del despliegue.

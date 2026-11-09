@@ -46,3 +46,15 @@ OPNsense y MikroTik usan mocks/contratos y backend upstream; la evidencia físic
 es UniFi. El test kernel del gateway es aislado, sin afirmar transporte por un proveedor
 WireGuard real. IPv6 de gateway, sidecar remoto, políticas múltiples y formatos UniFi legacy
 quedan fuera del alcance declarado del MVP, en ROADMAP.md.
+
+## Diagnóstico posterior del gateway desde clientes
+
+Se amplió la prueba de salida del propio contenedor con una prueba de **reenvío**:
+cliente → gateway → endpoint DNS/HTTP, comprobando NAT de retorno y comportamiento
+fail-closed/recuperación. Se ejecutó correctamente sobre la imagen desplegada y se
+incorporó a CI. La red de laboratorio utiliza exclusivamente rangos de documentación.
+
+En el entorno autorizado se verificaron también DNS y HTTPS directo, cadena forward
+abierta y una conexión HTTPS marcada por WireGuard que obtuvo HTTP 200 y estableció
+handshake. Estas evidencias no sustituyen la revisión de IP, máscara, DNS y aislamiento
+Wi-Fi del móvil concreto que reportó el problema.

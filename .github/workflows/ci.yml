@@ -50,3 +50,6 @@ jobs:
           docker build -t tebypass:ci .
           docker build -f gateway/Dockerfile -t tebypass-gateway:ci .
           docker run --rm --cap-add NET_ADMIN -e PYTHONPATH=/ --entrypoint python3 -v "$PWD/scripts/verify_gateway_network.py:/verify.py:ro" tebypass-gateway:ci /verify.py
+
+      - name: Verify forwarded client DNS, HTTP and fail-closed
+        run: python scripts/verify_gateway_forwarding.py --image tebypass-gateway:ci
