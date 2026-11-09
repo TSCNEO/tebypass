@@ -75,3 +75,17 @@ de orígenes ajenos. La configuración real del proxy permanece solo en el host 
 Validado con **105 tests** y controles de calidad. Tras desplegar `6f1aa1a`, por el acceso
 HTTPS real: login 200 con cookie Secure, guardado 200 y origen ajeno 403. El backend quedó
 seleccionado como `virtual_gateway` en el entorno autorizado.
+
+## Instalación guiada del reverse proxy
+
+Se eliminó la necesidad de identificar manualmente la conexión interna del proxy para
+el caso habitual: `scripts/setup_proxy.py` recibe la URL pública, identifica el salto
+mediante petición marcada, ofrece diagnóstico JSON y aplica con copia/restauración.
+Login y aviso de origen HTTPS no reconocido muestran el comando del entorno. Se añadió
+la guía `LLM_DEPLOYMENT.md`; no se automatizan certificados ni rutas iniciales de Traefik.
+
+Validado con **112 tests**, Ruff, formato, Mypy y sintaxis JavaScript. Desplegado el build
+`b3a14d0`: el asistente devuelve `ready` sin cambios al repetirlo sobre el acceso real.
+Se comprobaron esquema HTTPS, cookie Secure, guardado autenticado 200, origen ajeno 403
+y ayuda en login. Aplicación y rollback se prueban con Docker simulado; no se rompió
+voluntariamente el acceso de producción para probar recuperación.
