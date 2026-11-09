@@ -14,7 +14,7 @@
 - `feed_http.py` / `feeds_sync.py`: descarga acotada a 16 MiB y sustitución del snapshot
   validado. Un fallo conserva el anterior y registra error. HTTP 304 no rejuvenece la
   fecha de origen. No se permite fallback de JSON a texto/HTML.
-- `schedule.py` / `notifications.py`: horarios solo para contribuciones de feeds y
+- `schedule.py` / `notifications.py`: horarios solo para contribuciones comunitarias y
   webhook opcional de transiciones, con deduplicación persistida y reintento por ciclo.
 - `drivers`: implementan `BaseRouterDriver`; no consultan la BD. Omada/OPNsense aíslan
   clientes síncronos upstream en threads y esperan su finalización incluso al cancelar.

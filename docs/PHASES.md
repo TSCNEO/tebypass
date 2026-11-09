@@ -21,8 +21,23 @@
   autenticación/CSRF, validación WireGuard, reglas RouterOS, adaptadores y horarios/webhook.
 - La suite externa de stopliga para Omada e integración se ejecutó sobre la revisión fijada:
   **66 pruebas correctas**. No se copiaron sus destinos reales a fixtures del proyecto.
-- La verificación final del contenedor Linux, UI, despliegue y política UniFi se registra
-  al cerrar la entrega. No se almacena configuración ni infraestructura privada en Git.
+- Suite final: **103 pruebas correctas**, Ruff y formato conformes, Mypy sin errores en
+  `app tests`; verificación de tipos del gateway también correcta.
+- Imagen Linux: arranque real del lifespan, autenticación, assets y ciclo API completo de
+  alta/pausa/reactivación/borrado/logout sobre base aislada.
+- Gateway Linux: comandos del controlador contra nftables real, descarte seleccionado,
+  ruta normal y fail-open explícito; creación/retirada de WireGuard con claves efímeras;
+  arranque Docker completo y restauración del checkpoint después de reiniciar.
+- UniFi real: política temporal de documentación creada, activada, desactivada y eliminada,
+  verificando el resultado remoto. Se detectó y corrigió que UniFi exige conservar miembros
+  al desactivar: una lista vacía devuelve HTTP 400 en el firmware probado.
+- Navegador local: acceso, carga sin CDN, campos Omada y alta/pausa manual comprobados.
+- **Desplegado en el entorno autorizado**, build `c0e1ef1`, versión 0.2.0. Ambos contenedores
+  running/healthy. Feed habilitado, señal global inactiva, ningún override manual y **cero
+  prefijos efectivos** tras sincronización verificada. API y sonda UniFi correctas;
+  lecturas privadas anónimas rechazadas y logout revoca la sesión.
+- Copia consistente de SQLite y claves conservada, junto con imágenes anteriores para
+  rollback. No se almacena configuración ni infraestructura privada en Git.
 
 ## Límites de aceptación
 

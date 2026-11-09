@@ -15,7 +15,8 @@ se reemplaza por el alcance verificable; el detalle de evidencia vive en PHASES.
 
 ## Validación y cierre
 
-Las pruebas locales, kernel Linux, despliegue y sonda operativa se registran en PHASES.md.
+MVP integrado en main y desplegado. Las pruebas locales, kernel Linux, despliegue y sonda
+operativa están registradas en PHASES.md.
 “Implementado” no significa probado en hardware de todos los fabricantes.
 
 ## Evolución posterior al MVP
