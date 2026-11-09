@@ -31,6 +31,7 @@ _BOOL_KEYS: Final[set[str]] = {
     "feed_force_active",
     "gateway_fail_closed",
     "resolve_ipv6",
+    "routing_enabled",
     "unifi_verify_tls",
 }
 # Bootstrap/internal keys: not editable from the UI (changing them at runtime cannot take effect)

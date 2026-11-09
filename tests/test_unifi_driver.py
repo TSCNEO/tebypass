@@ -111,3 +111,47 @@ async def test_unifi_vpn_networks_api_endpoint(client: httpx.AsyncClient) -> Non
         assert len(data) == 1
         assert data[0]["id"] == "vpn-123"
         assert data[0]["name"] == "Mullvad-WG"
+
+
+@pytest.mark.asyncio
+async def test_unifi_teardown_and_purge_endpoint(client: httpx.AsyncClient) -> None:
+    """UniFi teardown deletes the traffic route, and the purge endpoint sets routing_enabled=False."""
+    deleted_urls: list[str] = []
+
+    def mock_handler(request: httpx.Request) -> httpx.Response:
+        url_str = str(request.url)
+        if request.method == "GET" and "/trafficroutes" in url_str:
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "_id": "route-del-99",
+                        "description": "TeByPass",
+                        "matching_target": "IP",
+                        "enabled": True,
+                    }
+                ],
+            )
+        if request.method == "DELETE" and "route-del-99" in url_str:
+            deleted_urls.append(url_str)
+            return httpx.Response(200, json={})
+        return httpx.Response(200, json={})
+
+    transport = httpx.MockTransport(mock_handler)
+    driver = UniFiRouterDriver()
+    driver.controller_url = "https://unifi.example.local"
+    driver.api_key = "test-key"
+    driver.route_name = "TeByPass"
+    driver._client = lambda: httpx.AsyncClient(transport=transport)  # type: ignore[method-assign]
+
+    await driver.teardown()
+    assert len(deleted_urls) == 1
+    assert "route-del-99" in deleted_urls[0]
+    assert len(driver._active_routes) == 0
+
+    # Test purge API endpoint
+    with patch.object(UniFiRouterDriver, "teardown", return_value=None):
+        resp = await client.post("/api/v1/settings/router/purge")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["success"] is True

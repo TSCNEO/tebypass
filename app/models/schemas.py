@@ -185,6 +185,14 @@ class RouterTestResponse(BaseModel):
     details: dict[str, Any] = Field(default_factory=dict)
 
 
+class RouterPurgeResponse(BaseModel):
+    """Result of an on-demand router route/rule purge."""
+
+    success: bool
+    driver: str
+    message: str
+
+
 class UniFiVPNNetwork(BaseModel):
     """UniFi VPN Client (WireGuard / OpenVPN) network definition."""
 

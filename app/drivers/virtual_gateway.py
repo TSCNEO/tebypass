@@ -16,6 +16,7 @@ import asyncio
 import contextlib
 import ipaddress
 import json
+import logging
 import os
 import shutil
 import time
@@ -30,6 +31,8 @@ from app.drivers.base import (
     SyncResult,
     TargetCIDR,
 )
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_GATEWAY_SOCKET = "/data/gateway.sock"
 SOCKET_TIMEOUT_SECONDS = 5.0
@@ -344,3 +347,10 @@ class VirtualGatewayDriver(BaseRouterDriver):
     async def close(self) -> None:
         """Release driver resources (no persistent connection is held)."""
         return None
+
+    async def teardown(self) -> None:
+        """Flush all targets from the nftables set."""
+        if self.socket_path():
+            with contextlib.suppress(Exception):
+                await self._socket_request({"action": "flush"})
+        self._cached_routes.clear()

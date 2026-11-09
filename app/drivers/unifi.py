@@ -293,3 +293,40 @@ class UniFiRouterDriver(BaseRouterDriver):
     async def close(self) -> None:
         """Release HTTP client sessions."""
         pass
+
+    async def teardown(self) -> None:
+        """Find and delete the TeByPass traffic route from UniFi."""
+        if not self.controller_url or not self.api_key:
+            self._active_routes.clear()
+            return
+
+        async with self._client() as client:
+            prefix = await self.discover_prefix(client)
+            routes_url = f"{self.controller_url}{prefix}/v2/api/site/{self.site}/trafficroutes"
+            try:
+                resp = await client.get(routes_url)
+                if resp.status_code == 200:
+                    routes_data = resp.json()
+                    if isinstance(routes_data, list):
+                        for r in routes_data:
+                            if isinstance(r, dict) and r.get("description") == self.route_name:
+                                route_id = r.get("_id")
+                                if route_id:
+                                    del_resp = await client.delete(f"{routes_url}/{route_id}")
+                                    if del_resp.status_code in (200, 204):
+                                        logger.info(
+                                            "Deleted UniFi traffic route %s (%s)",
+                                            self.route_name,
+                                            route_id,
+                                        )
+                                    else:
+                                        logger.warning(
+                                            "Failed to delete UniFi traffic route: %s %s",
+                                            del_resp.status_code,
+                                            del_resp.text[:200],
+                                        )
+            except Exception as ex:
+                logger.warning("Error deleting UniFi traffic route: %s", ex)
+
+        self._active_routes.clear()
+        self._last_sync = datetime.now(UTC)

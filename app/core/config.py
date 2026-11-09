@@ -128,5 +128,14 @@ class Settings(BaseSettings):
     mikrotik_password: str | None = None
     mikrotik_address_list: str = "TeByPass_Targets"
 
+    # Master Routing switch: when False, routes are purged from the router and sync is paused
+    routing_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "TEBYPASS_ROUTING_ENABLED",
+            "ROUTING_ENABLED",
+        ),
+    )
+
 
 settings = Settings()

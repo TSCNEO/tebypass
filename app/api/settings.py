@@ -10,7 +10,7 @@ from app.core.config import settings
 from app.core.settings_store import masked_dump, save_settings
 from app.drivers import get_router_driver
 from app.drivers.unifi import UniFiRouterDriver
-from app.models.schemas import RouterTestResponse, UniFiVPNNetwork
+from app.models.schemas import RouterPurgeResponse, RouterTestResponse, UniFiVPNNetwork
 
 logger = logging.getLogger("tebypass.api.settings")
 
@@ -106,4 +106,33 @@ async def test_router_driver() -> RouterTestResponse:
             "active_routes_count": status_report.active_routes_count,
             **status_report.details,
         },
+    )
+
+
+@router.post("/settings/router/purge", response_model=RouterPurgeResponse)
+async def purge_router_routes() -> RouterPurgeResponse:
+    """Purge all routes, address-lists, or sets created by TeByPass on the active router."""
+    driver_name = settings.router_driver
+    try:
+        driver = get_router_driver()
+    except ValueError as ex:
+        raise HTTPException(status_code=400, detail=str(ex)) from ex
+
+    try:
+        await driver.initialize()
+        await driver.teardown()
+        await save_settings({"routing_enabled": False})
+    except Exception as ex:
+        logger.warning("Router teardown/purge failed: %s", ex)
+        raise HTTPException(
+            status_code=502,
+            detail=f"Fallo al purgar rutas en {driver_name}: {ex}",
+        ) from ex
+    finally:
+        await driver.close()
+
+    return RouterPurgeResponse(
+        success=True,
+        driver=driver_name,
+        message=f"Regla eliminada de {driver_name}. Enrutamiento puesto en pausa.",
     )

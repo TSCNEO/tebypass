@@ -82,3 +82,7 @@ class BaseRouterDriver(ABC):
     async def close(self) -> None:
         """Release open connections, file descriptors, or background tasks."""
         pass
+
+    async def teardown(self) -> None:  # noqa: B027 - optional lifecycle hook for drivers supporting remote purge
+        """Purge or remove all routes/rules managed by this driver from the target device."""
+        pass

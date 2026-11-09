@@ -55,6 +55,21 @@ class ReconciliationEngine:
             start_time = time.perf_counter()
             now = datetime.now(UTC)
 
+            if not settings.routing_enabled:
+                logger.info("Routing is globally disabled; tearing down any active router rules.")
+                try:
+                    await self.driver.teardown()
+                except Exception as ex:
+                    logger.warning("Driver teardown failed while routing disabled: %s", ex)
+                return SyncResult(
+                    driver_name=self.driver.driver_name,
+                    added_count=0,
+                    removed_count=0,
+                    total_active=0,
+                    duration_ms=round((time.perf_counter() - start_time) * 1000.0, 2),
+                    success=True,
+                )
+
             # 0. Refresh any remote feed that is due (respecting its enabled toggle)
             async with AsyncSessionLocal() as feed_session:
                 try:

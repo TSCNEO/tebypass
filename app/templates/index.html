@@ -436,9 +436,25 @@
             <div><label class="field">Nombre de la address-list</label><input x-model="settings.mikrotik_address_list" class="mono"></div>
           </div>
 
-          <div class="flex items-center gap-3 flex-wrap">
+          <div class="panel-inner rounded-md p-3 border edge space-y-2">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" x-model="settings.routing_enabled" class="rounded bg-slate-900 border-slate-700 text-amber-500">
+              <span class="text-xs font-semibold text-slate-200">Enrutamiento activo</span>
+            </label>
+            <p class="text-[11px] text-slate-600">
+              Si se desmarca, se eliminan las rutas del router automáticamente y se pausa la sincronización.
+            </p>
+          </div>
+
+          <div class="flex items-center gap-3 flex-wrap pt-2 border-t edge">
             <button class="btn btn-ghost px-3 py-2 rounded-md text-xs mono uppercase" @click="testRouter()" :disabled="busy.test">
               <span x-show="!busy.test">Probar conexión</span><span x-show="busy.test">Probando…</span>
+            </button>
+            <button class="btn px-3 py-2 rounded-md text-xs mono uppercase text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 border border-rose-900/60"
+                    @click="purgeRouterRules()"
+                    :disabled="busy.purge">
+              <span x-show="!busy.purge" x-text="settings.router_driver === 'unifi' ? 'Eliminar regla de UniFi' : 'Purgar regla del router'"></span>
+              <span x-show="busy.purge">Eliminando…</span>
             </button>
             <span x-show="routerTest" class="text-xs mono" :class="routerTest && routerTest.healthy ? 'text-emerald-400' : 'text-red-400'"
                   x-text="routerTest ? (routerTest.healthy ? 'Conexión correcta' : 'No se pudo conectar') : ''"></span>
@@ -570,7 +586,7 @@ function tebypass() {
     folderForm: { name: '', color: '#f59e0b' },
     formError: '',
     routerTest: null,
-    busy: { sync: false, feed: false, save: false, settings: false, test: false, wg: false, resolve: null },
+    busy: { sync: false, feed: false, save: false, settings: false, test: false, purge: false, wg: false, resolve: null },
     toasts: [],
 
     async boot() {
@@ -834,6 +850,22 @@ function tebypass() {
         }
       } catch (e) { this.fail(e); }
       this.busy.test = false;
+    },
+
+    async purgeRouterRules() {
+      const driverName = this.settings.router_driver === 'unifi' ? 'UniFi' : 'tu router';
+      if (!confirm(`¿Eliminar la regla TeByPass de ${driverName}? Esto quitará la ruta de tráfico en el dispositivo y pondrá en pausa la sincronización.`)) {
+        return;
+      }
+      this.busy.purge = true;
+      try {
+        const res = await this.api('POST', '/api/v1/settings/router/purge', {});
+        this.toast(res.message || 'Regla eliminada del router');
+        this.settings.routing_enabled = false;
+        this.routerTest = null;
+        await this.loadStatus();
+      } catch (e) { this.fail(e); }
+      this.busy.purge = false;
     },
 
     readWgFile(ev) {
