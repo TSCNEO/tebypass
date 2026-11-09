@@ -4,13 +4,14 @@ El MVP es candidato a una primera release **0.2.0**, con alcance y límites indi
 README/PROJECT. No se anuncia certificación de todos los routers ni compatibilidad IPv6
 del gateway. Este procedimiento no convierte automáticamente un repositorio privado en público.
 
-## Validación privada actual
+## Estado de publicación comprobado (2026-11-09)
 
 Candidata `v0.2.0-rc.3` preparada en borrador pre-release. Main y candidata pasaron el
 flujo completo, incluidas imágenes descargadas de GHCR, persistencia, pruebas de kernel
 y checksums de assets descargados. Evidencia en [PHASES.md](PHASES.md#distribución-de-imágenes-y-candidata-de-primera-release).
-Todavía no hay release pública ni latest estable. Falta abrir código y ambos paquetes,
-comprobar pull sin credenciales y publicar la entrega elegida.
+El repositorio ya es público. La candidata continúa en borrador y no hay release pública.
+Antes de anunciar instalación por release, comprobar visibilidad y pull anónimo de ambos
+paquetes y publicar la entrega elegida. No presuponer disponibilidad de `latest`.
 
 ## Qué hace GitHub
 
@@ -50,7 +51,7 @@ Si la release ya existe, adjunta/actualiza esos assets. Main no crea releases.
 2. Confirmar CI y `verify-install` de la versión candidata. Revisar límites conocidos,
    notas de release y procedimiento de actualización/rollback.
 3. Publicar el código fuente y las imágenes para que la instalación no requiera login.
-   El repositorio es privado durante la preparación. GHCR crea paquetes privados por
+   El repositorio ya es público; comprobar por separado los paquetes. GHCR crea paquetes privados por
    defecto: tras su primera publicación, en cada paquete → Package settings → Change
    visibility, establecer Public. No confundirlo con visibilidad del repositorio.
 4. Comprobar pull anónimo de **ambas** imágenes desde un Docker limpio, instalar usando

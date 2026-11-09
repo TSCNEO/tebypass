@@ -13,7 +13,7 @@ El proyecto prohíbe de forma estricta la arquitectura monolítica. El sistema d
 1. **Core Engine (`app/core`)**: Orquestación pura, algoritmos de reconciliación idempotente, resolución DNS asíncrona y caché de ventana deslizante (sliding-window TTL). No tiene conocimiento de routers ni de protocolos de red específicos.
 2. **Drivers de Router (`app/drivers`)**: Módulos intercambiables que implementan la interfaz abstracta `BaseRouterDriver`. Cada driver traduce los CIDRs objetivo al plano de control del router o firewall correspondiente (UniFi, MikroTik, Linux nftables, Mock). Ningún driver accede directamente a la base de datos ni a la API HTTP.
 3. **API y Web (`app/api`, `app/templates`)**: Interfaz REST ligera con FastAPI y UI renderizada en servidor con Jinja2 + Alpine.js. Consume exclusivamente los servicios del Core Engine.
-4. **Virtual Gateway Sidecar (`gateway/`)**: Contenedor de red independiente (Alpine Linux + nftables + WireGuard) desacoplado del runtime de Python. Puede ejecutarse en el mismo host o en un nodo de red separado.
+4. **Virtual Gateway Sidecar (`gateway/`)**: Contenedor de red independiente (Alpine Linux + nftables + WireGuard) desacoplado del runtime de Python. En el MVP comparte host y volumen con la aplicación; no admite un nodo remoto.
 
 ---
 
@@ -128,6 +128,12 @@ La interfaz web de TeByPass sigue una estética **industrial / NOC / telemetría
 ---
 
 ## 7. Protocolo para Agentes LLM: Despliegue del Virtual Gateway
+
+Antes de aplicar este apartado, seguir [docs/LLM_DEPLOYMENT.md](docs/LLM_DEPLOYMENT.md):
+preguntar router, host y salida disponible, y elegir el driver. Con UniFi, Omada,
+OPNsense o MikroTik compatibles, desplegar solo la aplicación. Este apartado se aplica
+exclusivamente cuando se ha elegido `virtual_gateway`.
+
 
 Cuando un agente de IA asista a un usuario en el despliegue del modo **Gateway Virtual Propio** (`tebypass-gateway`), debe seguir este flujo interactivo estructurado, sin omitir pasos ni asumir parámetros a ciegas:
 
