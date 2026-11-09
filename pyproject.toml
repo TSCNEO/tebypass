@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Agnostic, modular L3 split-routing bypass engine for arbitrary network endpoints"
 readme = "README.md"
 requires-python = ">=3.12"
-license = "MIT"
+license = "AGPL-3.0-or-later"
 authors = [
     { name = "TeByPass Contributors" }
 ]

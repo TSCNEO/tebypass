@@ -172,4 +172,6 @@ TeByPass es una **herramienta de enrutamiento**: decide por dónde sale cada paq
 
 ## Licencia
 
-MIT. Consulta [LICENSE](LICENSE).
+GNU Affero General Public License v3 (AGPL-3.0-or-later). Consulta [LICENSE](LICENSE).
+
+Permite libre uso, modificación y distribución en proyectos personales o comunitarios, garantizando que cualquier derivado o servicio mantenga su código abierto bajo esta misma licencia.

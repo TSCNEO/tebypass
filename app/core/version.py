@@ -9,10 +9,50 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 DEFAULT_VERSION = "0.1.0"
 
 
+def _read_git_head_pure(git_dir: Path) -> str:
+    """Parse .git directory directly without needing git binary."""
+    try:
+        if git_dir.is_file():
+            txt = git_dir.read_text(encoding="utf-8").strip()
+            if txt.startswith("gitdir:"):
+                git_dir = (git_dir.parent / txt.split(":", 1)[1].strip()).resolve()
+
+        head_file = git_dir / "HEAD"
+        if not head_file.exists():
+            return ""
+
+        head_txt = head_file.read_text(encoding="utf-8").strip()
+        if not head_txt.startswith("ref:"):
+            return head_txt[:7]
+
+        ref_path = head_txt.split(":", 1)[1].strip()
+        ref_file = git_dir / ref_path
+        if ref_file.exists():
+            return ref_file.read_text(encoding="utf-8").strip()[:7]
+
+        packed_file = git_dir / "packed-refs"
+        if packed_file.exists():
+            for line in packed_file.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line or line.startswith("#") or line.startswith("^"):
+                    continue
+                parts = line.split()
+                if len(parts) >= 2 and parts[1] == ref_path:
+                    return parts[0][:7]
+    except Exception:
+        pass
+    return ""
+
+
 def _get_git_info() -> dict[str, str]:
     """Extract Git commit short hash and dirty state if repository exists."""
     git_dir = BASE_DIR / ".git"
     if not git_dir.exists():
+        build_stamp = BASE_DIR / "BUILD_COMMIT"
+        if build_stamp.exists():
+            c = build_stamp.read_text(encoding="utf-8").strip()
+            if c:
+                return {"commit": c[:7], "commit_count": "0", "tag": ""}
         return {}
 
     try:
@@ -56,6 +96,9 @@ def _get_git_info() -> dict[str, str]:
             "tag": tag,
         }
     except Exception:
+        pure_commit = _read_git_head_pure(git_dir)
+        if pure_commit:
+            return {"commit": pure_commit, "commit_count": "0", "tag": ""}
         return {}
 
 
