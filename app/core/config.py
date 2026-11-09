@@ -1,5 +1,7 @@
 """Application configuration module."""
 
+from typing import Literal
+
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -11,6 +13,7 @@ class Settings(BaseSettings):
         env_prefix="TEBYPASS_",
         env_file=".env",
         extra="ignore",
+        populate_by_name=True,
     )
 
     host: str = "0.0.0.0"
@@ -20,14 +23,16 @@ class Settings(BaseSettings):
         default=None,
         validation_alias=AliasChoices("TEBYPASS_DATABASE_URL", "DATABASE_URL"),
     )
-    router_driver: str = Field(
-        default="mock",
-        validation_alias=AliasChoices(
-            "TEBYPASS_ROUTER_DRIVER",
-            "TEBYPASS_ROUTER_TYPE",
-            "ROUTER_DRIVER",
-            "ROUTER_TYPE",
-        ),
+    router_driver: Literal["mock", "unifi", "omada", "opnsense", "mikrotik", "virtual_gateway"] = (
+        Field(
+            default="mock",
+            validation_alias=AliasChoices(
+                "TEBYPASS_ROUTER_DRIVER",
+                "TEBYPASS_ROUTER_TYPE",
+                "ROUTER_DRIVER",
+                "ROUTER_TYPE",
+            ),
+        )
     )  # mock, virtual_gateway, unifi, mikrotik
     sync_interval_seconds: int = 300
     sliding_window_seconds: int = 3600
@@ -38,6 +43,16 @@ class Settings(BaseSettings):
     master_pin_hash: str | None = None
     secret_key: str = "change-me-in-production-neutral-secret-key"
     log_level: str = "INFO"
+
+    feed_max_age_seconds: int = 3600
+    feed_lookback_hours: int = 24
+    feed_max_targets: int = 16384
+
+    active_days: str = ""
+    active_hours: str = ""
+    active_timezone: str = "UTC"
+    notification_url: str = ""
+    notification_token: str = ""
 
     # Feed ingestion behaviour (persisted in SQLite and editable from the UI)
     feed_force_active: bool = Field(
@@ -121,6 +136,24 @@ class Settings(BaseSettings):
             "STOPLIGA_CONTROLLER_VERIFY_TLS",
         ),
     )
+
+    omada_base_url: str = ""
+    omada_client_id: str = ""
+    omada_client_secret: str = ""
+    omada_controller_id: str = ""
+    omada_site: str = "Default"
+    omada_target_type: Literal["wan", "vpn"] = "vpn"
+    omada_target: str = ""
+    omada_route_name: str = "TeByPass"
+    omada_verify_tls: bool = True
+    opnsense_host: str = ""
+    opnsense_api_key: str = ""
+    opnsense_api_secret: str = ""
+    opnsense_alias_name: str = "TeByPass_Targets"
+    opnsense_route_name: str = "TeByPass"
+    opnsense_verify_tls: bool = True
+    mikrotik_routing_table: str = ""
+    mikrotik_verify_tls: bool = True
 
     # MikroTik Driver specific configuration
     mikrotik_api_url: str | None = None

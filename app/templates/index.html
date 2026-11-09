@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="dark">
   <title>TeByPass // Panel de control</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.3/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="/static/app.css">
+  <script defer src="/static/vendor/alpine.min.js"></script>
   <style>
     :root {
       --bg-charcoal: #0d0f12;
@@ -89,6 +89,7 @@
           <span x-show="!busy.sync">Sincronizar ahora</span>
           <span x-show="busy.sync">Sincronizando…</span>
         </button>
+        <button class="btn btn-ghost px-3 py-2 rounded-md text-xs" @click="await api('DELETE', '/auth/session'); location.href='/login'">Salir</button>
         <button class="btn btn-primary px-3 py-2 rounded-md text-xs mono uppercase tracking-wider" @click="openSettings()">
           Ajustes
         </button>
@@ -102,6 +103,13 @@
       Cargando configuración…
     </div>
 
+    <div x-show="state.last_sync_error || state.feed_errors" class="panel border border-red-700 rounded-md p-3 text-sm text-red-300" role="alert">
+      <span x-text="state.last_sync_error || 'Hay fuentes con errores; se conserva su último estado válido.'"></span>
+    </div>
+    <div x-show="feed" class="mono text-xs text-slate-400">
+      Señal comunitaria: <b class="text-amber-400" x-text="!feed || !feed.enabled ? 'PAUSADA' : feed.blocked === null ? 'SIN CONFIRMAR' : feed.blocked ? 'BLOQUEO ACTIVO' : 'SIN BLOQUEOS'"></b>
+      <span x-show="feed && feed.last_error" class="text-red-400" x-text="feed ? feed.last_error : ''"></span>
+    </div>
     <!-- ===================== FEED COMUNITARIO ===================== -->
     <section class="panel rounded-lg overflow-hidden">
       <div class="px-5 py-4 border-b edge flex items-start gap-4 flex-wrap">
@@ -381,12 +389,14 @@
             <select x-model="settings.router_driver">
               <option value="mock">Simulación (no toca nada) — para probar</option>
               <option value="unifi">Router UniFi / UniFi OS</option>
+              <option value="omada">TP-Link Omada</option>
+              <option value="opnsense">OPNsense</option>
               <option value="mikrotik">Router MikroTik</option>
               <option value="virtual_gateway">Gateway virtual propio (WireGuard + nftables)</option>
             </select>
             <p class="text-[11px] text-slate-600 mt-1">
-              UniFi y MikroTik crean una lista de IPs en el propio router. El gateway virtual se usa
-              cuando tu router es de la operadora y no puedes crear reglas.
+              El router aplica una política de salida hacia la VPN elegida. El gateway virtual
+              permite hacerlo cuando el router no ofrece políticas de enrutamiento.
             </p>
           </div>
 
@@ -426,11 +436,6 @@
                 </select>
               </div>
             </div>
-            <p class="text-[11px] text-slate-600">Si prefieres usuario y contraseña en vez de API Key, rellénalos aquí:</p>
-            <div class="grid grid-cols-2 gap-3">
-              <div><label class="field">Usuario</label><input x-model="settings.unifi_username" class="mono"></div>
-              <div><label class="field">Contraseña</label><input type="password" x-model="settings.unifi_password"></div>
-            </div>
           </div>
 
           <div x-show="settings.router_driver === 'mikrotik'" class="space-y-3 panel-inner rounded-md p-4 border edge">
@@ -439,7 +444,30 @@
               <div><label class="field">Usuario</label><input x-model="settings.mikrotik_username" class="mono"></div>
               <div><label class="field">Contraseña</label><input type="password" x-model="settings.mikrotik_password"></div>
             </div>
-            <div><label class="field">Nombre de la address-list</label><input x-model="settings.mikrotik_address_list" class="mono"></div>
+            <div><label class="field">Prefijo de reglas gestionadas</label><input x-model="settings.mikrotik_address_list" class="mono"></div>
+          </div>
+
+          <div x-show="settings.router_driver === 'mikrotik'" class="panel-inner p-4 border edge rounded-md">
+            <label class="field">Tabla de salida preparada en RouterOS</label><input x-model="settings.mikrotik_routing_table" placeholder="egress" class="mono">
+            <p class="text-xs text-slate-400 mt-2">Crea antes una tabla FIB con ruta por defecto hacia tu VPN. Las reglas usan lookup-only-in-table. FastTrack y otras reglas mangle deben respetar esta política.</p>
+            <label class="flex gap-2 text-xs mt-2"><input type="checkbox" x-model="settings.mikrotik_verify_tls" class="!w-4">Verificar certificado TLS</label>
+          </div>
+          <div x-show="settings.router_driver === 'omada'" class="panel-inner p-4 border edge rounded-md space-y-3">
+            <template x-for="field in [['omada_base_url','URL del controlador'],['omada_client_id','Client ID'],['omada_controller_id','Controller / Omada ID'],['omada_site','Sitio'],['omada_target','Nombre o ID de salida'],['omada_route_name','Nombre de política']]" :key="field[0]">
+              <label class="block text-xs text-slate-400"><span x-text="field[1]"></span><input x-model="settings[field[0]]" class="mono mt-1"></label>
+            </template>
+            <label class="block text-xs text-slate-400">Client Secret<input type="password" x-model="settings.omada_client_secret"></label>
+            <label class="block text-xs text-slate-400">Tipo de salida<select x-model="settings.omada_target_type"><option value="vpn">VPN</option><option value="wan">WAN</option></select></label>
+            <label class="flex gap-2 text-xs"><input type="checkbox" x-model="settings.omada_verify_tls" class="!w-4">Verificar certificado TLS</label>
+          </div>
+          <div x-show="settings.router_driver === 'opnsense'" class="panel-inner p-4 border edge rounded-md space-y-3">
+            <template x-for="field in [['opnsense_host','Host (sin esquema)'],['opnsense_alias_name','Alias de destinos'],['opnsense_route_name','Descripción exacta de regla']]" :key="field[0]">
+              <label class="block text-xs text-slate-400"><span x-text="field[1]"></span><input x-model="settings[field[0]]" class="mono mt-1"></label>
+            </template>
+            <label class="block text-xs text-slate-400">API Key<input type="password" x-model="settings.opnsense_api_key"></label>
+            <label class="block text-xs text-slate-400">API Secret<input type="password" x-model="settings.opnsense_api_secret"></label>
+            <label class="flex gap-2 text-xs"><input type="checkbox" x-model="settings.opnsense_verify_tls" class="!w-4">Verificar certificado TLS</label>
+            <p class="text-xs text-slate-400">Prepara una regla en Firewall → Rules [new] / Automation → Filter con esta descripción, el alias indicado como destino y tu gateway VPN. TeByPass gestiona el alias y activa o desactiva esa regla.</p>
           </div>
 
           <div class="panel-inner rounded-md p-3 border edge space-y-2">
@@ -472,8 +500,8 @@
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="field">Cada cuánto sincronizar (segundos)</label>
-              <input type="number" min="30" x-model.number="settings.sync_interval_seconds" class="mono">
-              <p class="text-[11px] text-slate-600 mt-1">300 = cada 5 minutos.</p>
+              <input type="number" min="0" x-model.number="settings.sync_interval_seconds" class="mono">
+              <p class="text-[11px] text-slate-600 mt-1">300 = cada 5 minutos. 0 = solo cambios manuales.</p>
             </div>
             <div>
               <label class="field">Cuánto recordar una IP (segundos)</label>
@@ -489,12 +517,20 @@
             <label class="field">URL del feed comunitario</label>
             <input x-model="settings.hayahora_feed_url" class="mono !text-xs">
           </div>
+          <div class="panel-inner rounded-md p-3 border edge space-y-3">
+            <p class="text-xs text-slate-400">Horario opcional de la lista comunitaria. La señal de bloqueo sigue siendo necesaria. Los destinos manuales permanecen activos.</p>
+            <label class="block text-xs">Días (vacío = todos)<input x-model="settings.active_days" placeholder="mon,tue,wed,thu,fri,sat,sun"></label>
+            <label class="block text-xs">Franja (vacío = todo el día)<input x-model="settings.active_hours" placeholder="18:00-23:00"></label>
+            <label class="block text-xs">Zona horaria<input x-model="settings.active_timezone" placeholder="Europe/Madrid"></label>
+            <label class="block text-xs">Webhook de transiciones (opcional, HTTPS)<input x-model="settings.notification_url" placeholder="https://events.example.net/tebypass"></label>
+            <label class="block text-xs">Token del webhook<input type="password" x-model="settings.notification_token"></label>
+          </div>
           <label class="flex items-start gap-3 cursor-pointer panel-inner rounded-md p-3 border edge">
             <input type="checkbox" x-model="settings.feed_force_active" class="!w-4 !h-4 mt-0.5">
             <span class="text-xs text-slate-400">
-              <b class="text-slate-200">Mantener siempre la lista completa.</b>
+              <b class="text-slate-200">Ignorar la señal global de bloqueo.</b>
               Si el feed dice que no hay bloqueo activo, no se enrutará nada. Activa esto para enrutar
-              igualmente todas las IPs conocidas de la lista (más cobertura, más tráfico por la VPN).
+              igualmente los destinos con incidencias recientes. La validación de frescura sigue activa.
             </span>
           </label>
           <label class="flex items-start gap-3 cursor-pointer panel-inner rounded-md p-3 border edge">
@@ -605,6 +641,7 @@ function tebypass() {
       const opts = { method: method, headers: { 'Content-Type': 'application/json' } };
       if (body !== undefined) opts.body = JSON.stringify(body);
       const res = await fetch(path, opts);
+      if (res.status === 401) { location.href = '/login'; throw Error('Sesión caducada'); }
       if (res.status === 204) return null;
       const text = await res.text();
       let data = null;
@@ -632,7 +669,7 @@ function tebypass() {
     },
 
     driverLabel() {
-      const names = { mock: 'Simulación', unifi: 'UniFi', mikrotik: 'MikroTik', virtual_gateway: 'Gateway virtual' };
+      const names = { mock: 'Simulación', unifi: 'UniFi', mikrotik: 'MikroTik', omada: 'Omada', opnsense: 'OPNsense', virtual_gateway: 'Gateway virtual' };
       const d = this.state.driver || {};
       return (names[d.driver_name] || d.driver_name || 'desconocido') + ' · ' + (d.health || '?');
     },
@@ -657,6 +694,7 @@ function tebypass() {
       try {
         const s = await this.api('GET', '/api/v1/status');
         this.state = s;
+        await this.loadFeeds();
         this.stats = { total_targets: s.total_targets, active_routes: s.active_routes };
       } catch (e) { /* silencioso: el poller no debe inundar de toasts */ }
     },
@@ -672,7 +710,7 @@ function tebypass() {
     async loadFeeds() {
       try {
         const feeds = await this.api('GET', '/api/v1/feeds');
-        this.feed = feeds.length ? feeds[0] : null;
+        this.feed = feeds.find(f => ['hayahora','stopliga'].includes(f.format)) || feeds[0] || null;
       } catch (e) { this.fail(e); }
     },
 
@@ -832,6 +870,7 @@ function tebypass() {
       this.busy.sync = true;
       try {
         const r = await this.api('POST', '/api/v1/sync', { force: true });
+        if (!r.success) throw Error(r.error_message || 'No se pudo aplicar la política');
         this.toast('Sincronizado: +' + r.added_count + ' / -' + r.removed_count + ' (total ' + r.total_active + ')');
         await this.loadStatus();
       } catch (e) { this.fail(e); }
@@ -894,7 +933,8 @@ function tebypass() {
     async uploadWg() {
       this.busy.wg = true;
       try {
-        await this.api('POST', '/api/v1/gateway/wireguard', { content: this.wgContent });
+        const result = await this.api('POST', '/api/v1/gateway/wireguard', { content: this.wgContent });
+        this.toast(result.applied ? 'Túnel aplicado' : 'Configuración guardada para el gateway virtual');
         this.toast('Configuración WireGuard guardada');
         this.wgContent = '';
         await this.loadWg();

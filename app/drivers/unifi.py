@@ -7,7 +7,7 @@ from typing import Any
 
 import httpx
 
-from app.core.config import settings
+from app.core.config import Settings, settings
 from app.drivers.base import (
     BaseRouterDriver,
     DriverHealth,
@@ -24,20 +24,22 @@ class UniFiRouterDriver(BaseRouterDriver):
 
     driver_name: str = "unifi"
 
-    def __init__(self) -> None:
-        url = settings.unifi_controller_url or ""
+    def __init__(self, cfg: Settings | None = None) -> None:
+        cfg = cfg or settings
+        url = cfg.unifi_controller_url or ""
         if url and not url.startswith(("http://", "https://")):
             url = f"https://{url}"
         self.controller_url = url.rstrip("/")
-        self.api_key = settings.unifi_api_key
-        self.username = settings.unifi_username
-        self.password = settings.unifi_password
-        self.site = settings.unifi_site or "default"
-        self.route_name = settings.unifi_route_name or "TeByPass"
-        self.vpn_network_id = settings.unifi_vpn_network_id
-        self.verify_tls = settings.unifi_verify_tls
+        self.api_key = cfg.unifi_api_key
+        self.username = cfg.unifi_username
+        self.password = cfg.unifi_password
+        self.site = cfg.unifi_site or "default"
+        self.route_name = cfg.unifi_route_name or "TeByPass"
+        self.vpn_network_id = cfg.unifi_vpn_network_id
+        self.verify_tls = cfg.unifi_verify_tls
         self._prefix: str | None = None
         self._last_sync: datetime | None = None
+        self._observed_at: datetime | None = None
         self._active_routes: set[str] = set()
         self._routes_loaded: bool = False
         self._last_health_check: datetime | None = None
@@ -123,6 +125,7 @@ class UniFiRouterDriver(BaseRouterDriver):
                 resp = await client.get(url)
                 resp.raise_for_status()
                 routes = resp.json()
+                self._observed_at = datetime.now(UTC)
                 if not isinstance(routes, list):
                     raise RuntimeError("Invalid UniFi routes response")
                 for r in routes:
@@ -132,7 +135,9 @@ class UniFiRouterDriver(BaseRouterDriver):
                             for entry in r.get("ip_addresses", [])
                             if isinstance(entry, dict) and entry.get("ip_or_subnet")
                         }
-                        self._active_routes = {str(ip) for ip in ips if ip}
+                        self._active_routes = (
+                            {str(ip) for ip in ips if ip} if r.get("enabled", True) else set()
+                        )
                         self._routes_loaded = True
                         return set(self._active_routes)
                 self._active_routes.clear()
@@ -141,11 +146,25 @@ class UniFiRouterDriver(BaseRouterDriver):
                 raise RuntimeError("Failed to query UniFi traffic routes") from ex
         return set(self._active_routes)
 
+    async def apply_policy(self, targets: set[TargetCIDR], enabled: bool) -> SyncResult:
+        current = await self.get_current_routes(force=True)
+        desired = {target.cidr for target in targets} if enabled else set()
+        result = await self.sync_routes(
+            {target for target in targets if target.cidr not in current} if enabled else set(),
+            current - desired,
+            force=True,
+            desired_cidrs=desired,
+        )
+        if result.success and await self.get_current_routes(force=True) != desired:
+            raise RuntimeError("UniFi did not retain the requested policy")
+        return result
+
     async def sync_routes(
         self,
         to_add: set[TargetCIDR],
         to_remove: set[str],
         force: bool = False,
+        desired_cidrs: set[str] | None = None,
     ) -> SyncResult:
         """Create or update the V2 Traffic Route on UniFi."""
         start = time.perf_counter()
@@ -183,6 +202,15 @@ class UniFiRouterDriver(BaseRouterDriver):
 
             routes_data = resp.json()
             existing_route: dict[str, Any] | None = None
+            if (
+                isinstance(routes_data, list)
+                and sum(
+                    isinstance(route, dict) and route.get("description") == self.route_name
+                    for route in routes_data
+                )
+                > 1
+            ):
+                raise RuntimeError("Duplicate managed UniFi routes")
             if isinstance(routes_data, list):
                 for r in routes_data:
                     if isinstance(r, dict) and r.get("description") == self.route_name:
@@ -196,7 +224,11 @@ class UniFiRouterDriver(BaseRouterDriver):
                     if isinstance(entry, dict) and entry.get("ip_or_subnet"):
                         current_ips.add(str(entry["ip_or_subnet"]))
 
-            desired_set = (current_ips | {item.cidr for item in to_add}) - to_remove
+            desired_set = (
+                desired_cidrs
+                if desired_cidrs is not None
+                else (current_ips | {item.cidr for item in to_add}) - to_remove
+            )
             desired_list = sorted(desired_set)
 
             ip_entries: list[dict[str, Any]] = [
@@ -208,6 +240,9 @@ class UniFiRouterDriver(BaseRouterDriver):
                 }
                 for ip in desired_list
             ]
+
+            if not existing_route and not desired_list:
+                return SyncResult(self.driver_name, 0, 0, 0, 0, True)
 
             # Resolve VPN client network ID
             vpn_id = self.vpn_network_id
@@ -257,6 +292,41 @@ class UniFiRouterDriver(BaseRouterDriver):
                         f"Failed to create UniFi traffic route: {create_resp.status_code} {create_resp.text[:300]}"
                     )
 
+            verified_response = await client.get(routes_url)
+            verified_response.raise_for_status()
+            verified_routes = verified_response.json()
+            matches = (
+                [
+                    route
+                    for route in verified_routes
+                    if isinstance(route, dict) and route.get("description") == self.route_name
+                ]
+                if isinstance(verified_routes, list)
+                else []
+            )
+            matched = matches[0] if len(matches) == 1 else {}
+            verified_ips = {
+                str(entry.get("ip_or_subnet"))
+                for entry in matched.get("ip_addresses", [])
+                if isinstance(entry, dict)
+            }
+            if (
+                matched.get("enabled") != bool(desired_list)
+                or verified_ips != set(desired_list)
+                or matched.get("network_id") != vpn_id
+            ):
+                if existing_route:
+                    restored = await client.put(
+                        f"{routes_url}/{existing_route['_id']}", json=existing_route
+                    )
+                    restored.raise_for_status()
+                elif len(matches) == 1 and matched.get("_id"):
+                    deleted = await client.delete(f"{routes_url}/{matched['_id']}")
+                    deleted.raise_for_status()
+                raise RuntimeError(
+                    "UniFi post-write verification failed; previous policy restoration requested"
+                )
+
             self._active_routes = set(desired_list)
             self._routes_loaded = True
             self._last_sync = datetime.now(UTC)
@@ -274,7 +344,10 @@ class UniFiRouterDriver(BaseRouterDriver):
     def get_status(self) -> DriverStatus:
         """Return current in-memory status without querying UniFi over the network."""
         is_configured = bool(self.controller_url and self.api_key)
-        health = DriverHealth.HEALTHY if is_configured else DriverHealth.DEGRADED
+        recent = self._observed_at is not None and (
+            datetime.now(UTC) - self._observed_at
+        ).total_seconds() < max(settings.sync_interval_seconds * 3, 60)
+        health = DriverHealth.HEALTHY if is_configured and recent else DriverHealth.DEGRADED
         return DriverStatus(
             driver_name=self.driver_name,
             health=health,
@@ -286,6 +359,7 @@ class UniFiRouterDriver(BaseRouterDriver):
                 "route_name": self.route_name,
                 "vpn_network_id": self.vpn_network_id,
                 "configured": is_configured,
+                "observed_at": self._observed_at.isoformat() if self._observed_at else None,
             },
         )
 

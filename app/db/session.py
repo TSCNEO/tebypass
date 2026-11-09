@@ -77,6 +77,18 @@ async def _apply_lightweight_migrations(conn: AsyncConnection) -> None:
             )
         )
 
+    feed_columns = {
+        row[1] for row in (await conn.execute(text("PRAGMA table_info(feeds)"))).fetchall()
+    }
+    for column, kind in {
+        "blocked": "BOOLEAN",
+        "source_updated_at": "DATETIME",
+        "last_checked_at": "DATETIME",
+        "last_error": "TEXT",
+    }.items():
+        if column not in feed_columns:
+            await conn.execute(text(f"ALTER TABLE feeds ADD COLUMN {column} {kind}"))
+
 
 async def init_db() -> None:
     """Initialize database tables, apply schema upgrades and load persisted settings."""

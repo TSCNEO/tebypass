@@ -226,12 +226,12 @@ async def test_wireguard_upload_preview_and_delete(
         [
             "[Interface]",
             "Address = 192.0.2.2/32",
-            "PrivateKey = placeholder-private-key",
+            "PrivateKey = AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
             "DNS = 192.0.2.1",
             "",
             "[Peer]",
-            "PublicKey = placeholder-public-key",
-            "PresharedKey = placeholder-preshared-key",
+            "PublicKey = AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+            "PresharedKey = AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=",
             "Endpoint = 198.51.100.1:51820",
             "AllowedIPs = 192.0.2.0/24",
         ]

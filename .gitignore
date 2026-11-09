@@ -67,3 +67,8 @@ gateway/wireguard/*.conf
 *~
 .DS_Store
 Thumbs.db
+
+# Runtime secrets and local verification artifacts
+data/
+output/
+node_modules/

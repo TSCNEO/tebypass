@@ -1,5 +1,6 @@
 """Unit tests for the UniFi router driver and VPN networks API."""
 
+import json
 from unittest.mock import patch
 
 import httpx
@@ -71,6 +72,7 @@ async def test_unifi_driver_mock_network_and_routes() -> None:
             if request.method == "GET":
                 return httpx.Response(200, json=fake_routes)
             if request.method == "PUT":
+                fake_routes[0].update(json.loads(request.content))
                 return httpx.Response(200, json={"success": True})
             if request.method == "POST":
                 return httpx.Response(201, json={"success": True})
@@ -187,7 +189,7 @@ async def test_unifi_driver_avoids_unnecessary_network_polling() -> None:
     # 1. get_status should NOT make any network call
     status = driver.get_status()
     assert status.driver_name == "unifi"
-    assert status.health.value == "healthy"
+    assert status.health.value == "degraded"
     assert network_calls == 0
 
     # 2. First get_current_routes loads from network (discover prefix + trafficroutes)
@@ -205,3 +207,29 @@ async def test_unifi_driver_avoids_unnecessary_network_polling() -> None:
     assert res.success is True
     assert res.added_count == 0
     assert network_calls == 2  # Still 2! No new calls!
+
+
+async def test_disabled_policy_with_retained_members_stays_disabled() -> None:
+    """A router can retain its member list while the rule is disabled."""
+    driver = UniFiRouterDriver()
+    driver.controller_url = "https://router.example.net"
+    driver.api_key = "test-key"
+    route = {
+        "_id": "rule",
+        "description": "TeByPass",
+        "enabled": False,
+        "network_id": "vpn",
+        "ip_addresses": [{"ip_or_subnet": "198.51.100.7/32"}],
+    }
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        if request.method == "PUT":
+            route.update(json.loads(request.content))
+            return httpx.Response(200, json=route)
+        return httpx.Response(200, json=[route])
+
+    driver._client = lambda: httpx.AsyncClient(transport=httpx.MockTransport(handle))  # type: ignore[method-assign]
+    result = await driver.apply_policy(set(), False)
+    assert result.success
+    assert route["enabled"] is False
+    assert await driver.get_current_routes(force=True) == set()

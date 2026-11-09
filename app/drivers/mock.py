@@ -69,7 +69,7 @@ class MockRouterDriver(BaseRouterDriver):
         self._sync_history.append(result)
         return result
 
-    async def health_check(self) -> DriverStatus:
+    def get_status(self) -> DriverStatus:
         """Return current status of the mock driver."""
         details: dict[str, Any] = {
             "mode": "in-memory-simulation",
@@ -83,6 +83,9 @@ class MockRouterDriver(BaseRouterDriver):
             last_sync=self._last_sync,
             details=details,
         )
+
+    async def health_check(self) -> DriverStatus:
+        return self.get_status()
 
     async def close(self) -> None:
         """Clear memory structures."""

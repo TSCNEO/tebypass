@@ -7,6 +7,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 
 from app.core.config import settings
+from app.core.wireguard_config import validate_config
 from app.models.schemas import (
     WireGuardStatusResponse,
     WireGuardUploadRequest,
@@ -66,19 +67,10 @@ async def upload_wireguard_config(
     payload: WireGuardUploadRequest,
 ) -> WireGuardUploadResponse:
     """Validate and persist a wg0.conf file with restrictive permissions."""
-    content = payload.content.strip()
-    if not content:
-        raise HTTPException(status_code=400, detail="WireGuard configuration is empty")
-    if "[Interface]" not in content:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid WireGuard configuration: missing [Interface] section",
-        )
-    if "PrivateKey" not in content:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid WireGuard configuration: missing PrivateKey entry",
-        )
+    try:
+        content = validate_config(payload.content)
+    except ValueError as ex:
+        raise HTTPException(status_code=400, detail=str(ex)) from ex
 
     path = _config_path()
     try:
@@ -94,7 +86,9 @@ async def upload_wireguard_config(
             detail=f"Could not write WireGuard configuration: {ex}",
         ) from ex
 
+    applied = await _apply_if_gateway()
     return WireGuardUploadResponse(
+        applied=applied,
         configured=True,
         peers=content.count("[Peer]"),
         uploaded_at=_uploaded_at(path),
@@ -107,4 +101,23 @@ async def delete_wireguard_config() -> WireGuardStatusResponse:
     path = _config_path()
     if path.is_file():
         path.unlink()
+    await _apply_if_gateway()
     return WireGuardStatusResponse(configured=False, path=str(path))
+
+
+async def _apply_if_gateway() -> bool:
+    if settings.router_driver != "virtual_gateway":
+        return False
+    from app.core.engine import ROUTING_LOCK
+    from app.drivers import get_driver
+    from app.drivers.virtual_gateway import VirtualGatewayDriver
+
+    async with ROUTING_LOCK:
+        driver = get_driver()
+        if not isinstance(driver, VirtualGatewayDriver):
+            raise HTTPException(status_code=409, detail="Gateway configuration changed")
+        try:
+            await driver.reload_wireguard()
+        except RuntimeError as ex:
+            raise HTTPException(status_code=502, detail=str(ex)) from ex
+    return True

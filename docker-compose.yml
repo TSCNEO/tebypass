@@ -3,6 +3,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        GIT_COMMIT: ${TEBYPASS_GIT_COMMIT:-unknown}
     container_name: tebypass
     restart: unless-stopped
     ports:
@@ -11,12 +13,11 @@ services:
       # Bootstrap only: listen port and database location.
       # Every other setting (router driver, credentials, feeds, intervals, WireGuard)
       # lives in SQLite inside the data volume and is configured from the web interface.
-      - TEBYPASS_PORT=${TEBYPASS_PORT:-9384}
+      - TEBYPASS_PORT=9384
       - TEBYPASS_DATABASE_URL=${TEBYPASS_DATABASE_URL:-sqlite+aiosqlite:////data/tebypass.db}
       - TEBYPASS_GATEWAY_SOCKET=/data/gateway.sock
     volumes:
       - tebypass-data:/data
-      - ./.git:/app/.git:ro
 
   # Optional Virtual Gateway sidecar for carrier router environments.
   # Reads the WireGuard config uploaded from the web UI (same data volume) and owns
@@ -35,8 +36,8 @@ services:
   # documentation placeholders (RFC 5737); set the real values in .env.
   tebypass-gateway:
     build:
-      context: ./gateway
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: gateway/Dockerfile
     container_name: tebypass-gateway
     restart: unless-stopped
     cap_add:

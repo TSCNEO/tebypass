@@ -55,10 +55,14 @@ def get_router_driver(custom_settings: Settings | None = None) -> BaseRouterDriv
     elif driver_type == "virtual_gateway":
         return VirtualGatewayDriver(set_name=cfg.gateway_nft_set_name)
     elif driver_type == "unifi":
-        return UniFiRouterDriver()
+        return UniFiRouterDriver(cfg)
     elif driver_type == "mikrotik":
-        return MikroTikRouterDriver()
+        return MikroTikRouterDriver(cfg)
+    elif driver_type in {"omada", "opnsense"}:
+        from app.drivers.stopliga_adapter import StopligaAdapter
+
+        return StopligaAdapter(cfg)
     else:
         raise ValueError(
-            f"Unsupported router driver '{driver_type}'. Valid options: mock, virtual_gateway, unifi, mikrotik"
+            f"Unsupported router driver '{driver_type}'. Valid options: mock, virtual_gateway, unifi, mikrotik, omada, opnsense"
         )

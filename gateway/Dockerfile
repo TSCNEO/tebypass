@@ -14,9 +14,11 @@ RUN apk add --no-cache \
     tzdata \
     curl
 
-COPY entrypoint.sh /entrypoint.sh
-COPY controller.py /controller.py
-COPY nftables.conf /etc/nftables/tebypass.conf
+COPY gateway/entrypoint.sh /entrypoint.sh
+COPY gateway/controller.py /controller.py
+COPY gateway/wireguard_runtime.py /wireguard_runtime.py
+COPY app/core/wireguard_config.py /wireguard_config.py
+COPY gateway/nftables.conf /etc/nftables/tebypass.conf
 
 RUN chmod +x /entrypoint.sh /controller.py
 

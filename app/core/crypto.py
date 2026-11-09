@@ -12,7 +12,6 @@ and automatically re-encrypted on next load or save.
 from __future__ import annotations
 
 import base64
-import contextlib
 import hashlib
 import logging
 import os
@@ -36,7 +35,14 @@ def derive_key(seed: str) -> bytes:
 
 def _resolve_data_dir() -> Path:
     """Extract the directory where the SQLite database lives."""
-    db_url = os.environ.get("TEBYPASS_DATABASE_URL", "")
+    from app.core.config import settings
+
+    db_url = (
+        os.environ.get("TEBYPASS_DATABASE_URL")
+        or os.environ.get("DATABASE_URL")
+        or settings.database_url
+        or ""
+    )
     if db_url and "sqlite" in db_url:
         if db_url.startswith("sqlite+aiosqlite:////") or db_url.startswith("sqlite:////"):
             path_part = "/" + db_url.split(":////", 1)[-1]
@@ -44,7 +50,7 @@ def _resolve_data_dir() -> Path:
         if ":///" in db_url:
             path_part = db_url.split(":///", 1)[-1]
             return Path(path_part).parent
-    db_path = os.environ.get("TEBYPASS_DB_PATH", "data/tebypass.db")
+    db_path = os.environ.get("TEBYPASS_DB_PATH", settings.db_path)
     return Path(db_path).parent
 
 
@@ -65,40 +71,30 @@ def get_encryption_key() -> bytes:
     # 2. Persisted key file in the data volume
     data_dir = _resolve_data_dir()
     key_file = data_dir / ".secret_key"
-    if key_file.is_file():
+    if key_file.exists():
         try:
             content = key_file.read_bytes().strip()
-            if len(content) == 44:  # Valid base64 Fernet key length
-                Fernet(content)  # Validate key
-                _CACHED_KEY = content
-                _CACHED_FERNET = Fernet(content)
-                return content
+            Fernet(content)
         except Exception as ex:
-            logger.warning("Could not use key in %s: %s", key_file, ex)
+            raise RuntimeError("Existing encryption key is invalid; restore it from backup") from ex
+        _CACHED_KEY = content
+        _CACHED_FERNET = Fernet(content)
+        return content
 
-    # 3. Generate a new key and save it to the data volume
     try:
         data_dir.mkdir(parents=True, exist_ok=True)
         new_key = Fernet.generate_key()
-        key_file.write_bytes(new_key)
-        with contextlib.suppress(Exception):
-            key_file.chmod(0o600)
-        logger.info("Generated new master encryption key in %s", key_file)
-        _CACHED_KEY = new_key
+        try:
+            fd = os.open(key_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(new_key)
+        except FileExistsError:
+            new_key = key_file.read_bytes().strip()
         _CACHED_FERNET = Fernet(new_key)
+        _CACHED_KEY = new_key
         return new_key
     except Exception as ex:
-        logger.warning(
-            "Failed to write key to %s (%s). Falling back to derived memory key.",
-            key_file,
-            ex,
-        )
-
-    # 4. Fallback deterministic key
-    fallback = derive_key("tebypass-default-neutral-secret-key")
-    _CACHED_KEY = fallback
-    _CACHED_FERNET = Fernet(fallback)
-    return fallback
+        raise RuntimeError("Cannot persist encryption key; refusing insecure fallback") from ex
 
 
 def get_fernet() -> Fernet:

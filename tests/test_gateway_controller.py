@@ -277,7 +277,7 @@ async def test_status_is_not_ok_without_wireguard(monkeypatch: pytest.MonkeyPatc
 
 async def test_unknown_command_and_ping() -> None:
     assert (await controller.dispatch({"cmd": "ping"}))["pong"] is True
-    unknown = await controller.dispatch({"cmd": "reload"})
+    unknown = await controller.dispatch({"cmd": "not-supported"})
     assert unknown["ok"] is False
     assert "unknown command" in str(unknown["error"])
 

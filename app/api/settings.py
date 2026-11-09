@@ -19,7 +19,7 @@ router = APIRouter(prefix="/api/v1", tags=["Settings"])
 
 async def _trigger_reconciliation_safely() -> None:
     try:
-        from app.main import trigger_reconciliation
+        from app.core.runtime import trigger_reconciliation
 
         await trigger_reconciliation(force=True)
     except Exception as ex:
@@ -40,6 +40,10 @@ async def update_settings(payload: dict[str, Any]) -> dict[str, Any]:
         asyncio.create_task(_trigger_reconciliation_safely())
     except ValueError as ex:
         raise HTTPException(status_code=400, detail=str(ex)) from ex
+    except RuntimeError as ex:
+        raise HTTPException(
+            status_code=502, detail="Cannot retire the previous router configuration"
+        ) from ex
     return masked_dump()
 
 

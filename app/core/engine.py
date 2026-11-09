@@ -2,16 +2,20 @@
 
 import asyncio
 import contextlib
+import ipaddress
 import logging
 import time
 from datetime import UTC, datetime
 
-from sqlalchemy import or_, select
+from sqlalchemy import delete, or_, select
 
 from app.core.cache import SlidingWindowCache
 from app.core.config import settings
 from app.core.feeds_sync import refresh_due_feeds
+from app.core.notifications import notify_transition
 from app.core.resolver import NativeDNSResolver
+from app.core.schedule import community_schedule
+from app.core.targets import as_utc
 from app.db.models import Feed, ResolvedIP, SyncEvent, Target
 from app.db.session import AsyncSessionLocal
 from app.drivers import get_driver
@@ -39,6 +43,7 @@ class ReconciliationEngine:
         self.sync_interval = sync_interval_seconds
         self._background_task: asyncio.Task[None] | None = None
         self._stop_event = asyncio.Event()
+        self._wake_event = asyncio.Event()
         self._is_syncing = ROUTING_LOCK
 
     @property
@@ -119,8 +124,11 @@ class ReconciliationEngine:
                 .where(
                     Target.enabled.is_(True),
                     or_(Target.feed_id.is_(None), Feed.enabled.is_(True)),
+                    or_(Target.feed_id.is_(None), Feed.blocked.is_(None), Feed.blocked.is_(True)),
                 )
             )
+            if not community_schedule().is_active():
+                query = query.where(Target.feed_id.is_(None))
             rows = await session.execute(query)
             targets = rows.scalars().all()
 
@@ -167,48 +175,43 @@ class ReconciliationEngine:
                                 )
                             )
 
+                    # Persisted retention survives rotation, transient DNS failure and restart.
+                    await session.flush()
+                    retained = (
+                        (
+                            await session.execute(
+                                select(ResolvedIP).where(ResolvedIP.target_id == t.id)
+                            )
+                        )
+                        .scalars()
+                        .all()
+                    )
+                    for entry in retained:
+                        if as_utc(entry.expires_at) > now:
+                            desired_targets[entry.cidr] = TargetCIDR(
+                                entry.cidr,
+                                t.id,
+                                f"Retained from {t.value}",
+                                as_utc(entry.expires_at),
+                            )
+            await session.execute(
+                delete(ResolvedIP)
+                .where(ResolvedIP.expires_at <= now)
+                .execution_options(synchronize_session=False)
+            )
             # Purge cache entries that expired beyond the sliding window
             await self.cache.purge_expired(now)
             await session.commit()
 
-        # 2. Query router driver for current routes (cached in memory unless force=True)
-        current_routes = await driver.get_current_routes(force=force)
-
-        # 3. Compute differences
-        desired_cidrs = set(desired_targets.keys())
-        cidrs_to_add = desired_cidrs - current_routes
-        cidrs_to_remove = current_routes - desired_cidrs
-
-        to_add_objects = {desired_targets[c] for c in cidrs_to_add}
-
-        logger.info(
-            "Reconciliation diff: %d to add, %d to remove, %d desired, %d current",
-            len(to_add_objects),
-            len(cidrs_to_remove),
-            len(desired_cidrs),
-            len(current_routes),
-        )
-
-        if not to_add_objects and not cidrs_to_remove and not force:
-            logger.debug(
-                "No route changes needed (%d routes active); skipping router sync.",
-                len(current_routes),
-            )
-            return SyncResult(
-                driver_name=driver.driver_name,
-                added_count=0,
-                removed_count=0,
-                total_active=len(current_routes),
-                duration_ms=round((time.perf_counter() - start_time) * 1000.0, 2),
-                success=True,
-            )
-
-        # 4. Apply changes via driver
-        sync_res = await driver.sync_routes(
-            to_add=to_add_objects,
-            to_remove=cidrs_to_remove,
-        )
-
+        # Drivers reconcile the complete policy, including enabled and output settings.
+        # Collapse overlaps and adjacent prefixes so interval-set backends receive disjoint ranges.
+        networks = [ipaddress.ip_network(value, strict=False) for value in desired_targets]
+        ipv4 = [net for net in networks if isinstance(net, ipaddress.IPv4Network)]
+        ipv6 = [net for net in networks if isinstance(net, ipaddress.IPv6Network)]
+        collapsed = [*ipaddress.collapse_addresses(ipv4), *ipaddress.collapse_addresses(ipv6)]
+        policy = {TargetCIDR(str(net), "aggregate") for net in collapsed}
+        sync_res = await driver.apply_policy(policy, bool(policy))
+        await driver.health_check()
         await self._record_result(sync_res, now)
         return sync_res
 
@@ -227,20 +230,26 @@ class ReconciliationEngine:
                 )
             )
             await session.commit()
+        await notify_transition(result)
+
+    def wake(self) -> None:
+        """Re-evaluate the runtime schedule after a settings change."""
+        self._wake_event.set()
 
     async def _loop(self) -> None:
-        """Internal periodic background loop."""
+        """Zero pauses automatic cycles; settings can enable them without a restart."""
         while not self._stop_event.is_set():
-            try:
+            self._wake_event.clear()
+            interval = int(settings.sync_interval_seconds)
+            if interval > 0:
                 await self.reconcile()
-            except Exception as ex:
-                logger.error("Error in scheduled reconciliation: %s", ex, exc_info=True)
-
-            # Re-read the interval every cycle so the UI can change it without a restart
-            interval = max(int(settings.sync_interval_seconds), 30)
-            self.sync_interval = interval
             with contextlib.suppress(TimeoutError):
-                await asyncio.wait_for(self._stop_event.wait(), timeout=float(interval))
+                await asyncio.wait_for(
+                    self._wake_event.wait(),
+                    timeout=community_schedule().wait_seconds(max(interval, 30))
+                    if interval > 0
+                    else None,
+                )
 
     def start_periodic_sync(self) -> None:
         """Start the background sync worker."""

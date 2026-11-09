@@ -27,20 +27,26 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv pip install --system -e ".[dev]"
+          uv sync --frozen --extra dev
 
       - name: Run Ruff Lint
         run: |
-          ruff check .
+          uv run --frozen ruff check .
 
       - name: Run Ruff Format Check
         run: |
-          ruff format --check .
+          uv run --frozen ruff format --check .
 
       - name: Run Mypy Type Checking
         run: |
-          mypy app tests
+          uv run --frozen mypy app tests
 
       - name: Run Pytest Suite
         run: |
-          pytest
+          uv run --frozen pytest
+
+      - name: Build production images and verify gateway kernel policy
+        run: |
+          docker build -t tebypass:ci .
+          docker build -f gateway/Dockerfile -t tebypass-gateway:ci .
+          docker run --rm --cap-add NET_ADMIN -e PYTHONPATH=/ --entrypoint python3 -v "$PWD/scripts/verify_gateway_network.py:/verify.py:ro" tebypass-gateway:ci /verify.py

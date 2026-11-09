@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app.api import (
@@ -19,26 +19,23 @@ from app.api import (
     settings_router,
     status_router,
 )
+from app.core.auth import AdminMiddleware, admin_token
+from app.core.auth import router as auth_router
 from app.core.bootstrap import seed_default_feed
-from app.core.cache import SlidingWindowCache
 from app.core.config import settings
-from app.core.engine import ReconciliationEngine
-from app.core.resolver import NativeDNSResolver
+from app.core.runtime import get_engine
+from app.core.service_errors import ServiceError
 from app.core.version import get_version_string
 from app.db.session import init_db
 from app.drivers import get_driver
-from app.drivers.base import SyncResult
 
 BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
-
-engine_instance: ReconciliationEngine | None = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application startup and shutdown lifecycle management."""
-    global engine_instance
 
     # 0. Configure logging level
     log_level = getattr(logging, settings.log_level.upper(), logging.INFO)
@@ -49,6 +46,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logging.getLogger("app").setLevel(log_level)
 
     # 1. Initialize SQLite database and WAL mode (also reloads persisted settings)
+    admin_token()
     await init_db()
     await seed_default_feed()
 
@@ -56,40 +54,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     driver = get_driver()
     await driver.initialize()
 
-    # 3. Setup resolver and sliding window cache
-    cache = SlidingWindowCache(default_window_seconds=settings.sliding_window_seconds)
-    resolver = NativeDNSResolver(cache=cache)
-
-    # 4. Instantiate and start core reconciliation engine
-    engine_instance = ReconciliationEngine(
-        driver=None,
-        cache=cache,
-        resolver=resolver,
-        sync_interval_seconds=settings.sync_interval_seconds,
-    )
-
-    if settings.sync_interval_seconds > 0:
-        engine_instance.start_periodic_sync()
-
-    yield
-
-    # Shutdown procedure
-    if engine_instance:
-        await engine_instance.stop()
-    await driver.close()
-
-
-def get_engine() -> ReconciliationEngine:
-    """Share the live engine and DNS cache across every entry point."""
-    global engine_instance
-    if engine_instance is None:
-        engine_instance = ReconciliationEngine()
-    return engine_instance
-
-
-async def trigger_reconciliation(force: bool = True) -> SyncResult:
-    """Serialize a reconciliation on the process-wide engine."""
-    return await get_engine().reconcile(force=force)
+    engine = get_engine()
+    engine.start_periodic_sync()
+    try:
+        yield
+    finally:
+        await engine.stop()
+        await get_driver().close()
 
 
 app = FastAPI(
@@ -99,13 +70,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+app.add_middleware(AdminMiddleware)
+app.include_router(auth_router)
+
+
+@app.exception_handler(ServiceError)
+async def service_error_handler(request: Request, exc: ServiceError) -> JSONResponse:
+    return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+
 
 # Register API Routers
 app.include_router(status_router)

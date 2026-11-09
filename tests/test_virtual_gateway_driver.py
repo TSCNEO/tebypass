@@ -179,7 +179,6 @@ async def test_check_health_alias_is_equivalent(
 
 async def test_missing_transport_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     driver = VirtualGatewayDriver(socket_path=str(tmp_path / "missing.sock"))
-    monkeypatch.setattr(driver, "_nft_binary", lambda: None)
 
     result = await driver.sync_routes(
         to_add={TargetCIDR(cidr="198.51.100.0/24", target_id="t-1")},
@@ -197,7 +196,6 @@ async def test_unreachable_socket_fails(tmp_path: Path, monkeypatch: pytest.Monk
     dead = tmp_path / "dead.sock"
     dead.write_text("")
     driver = VirtualGatewayDriver(socket_path=str(dead))
-    monkeypatch.setattr(driver, "_nft_binary", lambda: None)
     result = await driver.sync_routes({TargetCIDR(cidr="203.0.113.0/24", target_id="t-2")}, set())
     assert not result.success
     assert not driver._cached_routes

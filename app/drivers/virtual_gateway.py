@@ -1,14 +1,4 @@
-"""Router driver for the Alpine Linux + nftables virtual gateway sidecar.
-
-Two transports are supported, in this order:
-
-1. **Unix domain socket** (preferred): the sidecar runs ``gateway/controller.py`` and
-   exposes ``/data/gateway.sock`` through the shared ``/data`` volume. The application
-   never needs ``NET_ADMIN`` and the sidecar owns every nftables mutation.
-2. **Local nft binary**: when the application itself runs with ``NET_ADMIN`` on the
-   same network namespace as the ruleset.
-3. **Emulated**: in-memory cache, used by tests and dry runs.
-"""
+"""Unix-socket driver; the independent sidecar owns every network mutation."""
 
 from __future__ import annotations
 
@@ -18,7 +8,6 @@ import ipaddress
 import json
 import logging
 import os
-import shutil
 import time
 from datetime import UTC, datetime
 from typing import Any
@@ -60,15 +49,10 @@ class VirtualGatewayDriver(BaseRouterDriver):
         self._socket_path = socket_path
         self._last_sync: datetime | None = None
         self._cached_routes: set[str] = set()
-        self._nft_path: str | None = None
+        self._status: DriverStatus | None = None
 
     async def initialize(self) -> None:
-        """Resolve the control socket or the local nft binary."""
-        self._nft_path = shutil.which("nft")
-
-    # ------------------------------------------------------------------ #
-    # Transport helpers
-    # ------------------------------------------------------------------ #
+        return None
 
     def socket_path(self) -> str | None:
         """Return the control socket path when it exists and is a socket."""
@@ -83,12 +67,6 @@ class VirtualGatewayDriver(BaseRouterDriver):
                 return candidate
         return None
 
-    def _nft_binary(self) -> str | None:
-        """Resolve the nft binary lazily so a hot-reloaded driver is still usable."""
-        if self._nft_path is None:
-            self._nft_path = shutil.which("nft")
-        return self._nft_path
-
     async def _socket_request(
         self,
         payload: dict[str, Any],
@@ -101,17 +79,17 @@ class VirtualGatewayDriver(BaseRouterDriver):
 
         try:
             reader, writer = await asyncio.wait_for(
-                asyncio.open_unix_connection(path),
+                asyncio.open_unix_connection(path, limit=2 * 1024 * 1024),
                 timeout=timeout,
             )
-        except (OSError, TimeoutError):
+        except (OSError, TimeoutError, ValueError):
             return None
 
         try:
             writer.write(json.dumps(payload).encode("utf-8") + b"\n")
             await writer.drain()
             line = await asyncio.wait_for(reader.readline(), timeout=timeout)
-        except (OSError, TimeoutError):
+        except (OSError, TimeoutError, ValueError):
             return None
         finally:
             writer.close()
@@ -142,42 +120,25 @@ class VirtualGatewayDriver(BaseRouterDriver):
             self._cached_routes = elements
             return set(elements)
 
-        nft_path = self._nft_binary()
-        if not nft_path:
-            raise RuntimeError("Gateway unavailable: cannot observe routes")
+        raise RuntimeError("Gateway unavailable: cannot observe routes")
 
-        try:
-            cmd = [nft_path, "-j", "list", "set", "inet", "tebypass", self.set_name]
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, _ = await proc.communicate()
-            if proc.returncode == 0:
-                elements = self._parse_nft_json(stdout.decode())
-                self._cached_routes = elements
-                return set(elements)
-        except Exception as ex:
-            raise RuntimeError("Cannot observe local gateway routes") from ex
+    async def apply_policy(self, targets: set[TargetCIDR], enabled: bool) -> SyncResult:
+        response = await self._socket_request(
+            {"cmd": "policy", "fail_closed": settings.gateway_fail_closed}
+        )
+        if response is not None and not response.get("ok"):
+            raise RuntimeError("Gateway routing policy rejected")
+        return await super().apply_policy(targets, enabled)
 
-        raise RuntimeError("Cannot observe local gateway routes")
+    async def reload_wireguard(self) -> None:
+        response = await self._socket_request({"cmd": "reload"}, timeout=30)
+        if response is None or not response.get("ok"):
+            raise RuntimeError("Gateway did not apply WireGuard configuration")
 
-    @staticmethod
-    def _parse_nft_json(payload: str) -> set[str]:
-        """Extract set elements from ``nft -j`` output."""
-        elements: set[str] = set()
-        try:
-            document = json.loads(payload)
-        except json.JSONDecodeError:
-            return elements
-        for item in document.get("nftables", []):
-            if not isinstance(item, dict):
-                continue
-            entry = item.get("set")
-            if isinstance(entry, dict) and isinstance(entry.get("elem"), list):
-                elements.update(canonical_cidr(str(element)) for element in entry["elem"])
-        return elements
+    def get_status(self) -> DriverStatus:
+        return self._status or DriverStatus(
+            self.driver_name, DriverHealth.DEGRADED, len(self._cached_routes)
+        )
 
     async def sync_routes(
         self,
@@ -214,44 +175,7 @@ class VirtualGatewayDriver(BaseRouterDriver):
                 error_message=None,
             )
 
-        nft_path = self._nft_binary()
-        if nft_path:
-            commands: list[str] = []
-            for cidr in add_cidrs:
-                commands.append(f"add element inet tebypass {self.set_name} {{ {cidr} }}")
-            for cidr in remove_cidrs:
-                commands.append(f"delete element inet tebypass {self.set_name} {{ {cidr} }}")
-
-            if commands:
-                script = "\n".join(commands) + "\n"
-                try:
-                    proc = await asyncio.create_subprocess_exec(
-                        nft_path,
-                        "-f",
-                        "-",
-                        stdin=asyncio.subprocess.PIPE,
-                        stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.PIPE,
-                    )
-                    _, stderr = await proc.communicate(input=script.encode())
-                    if proc.returncode != 0:
-                        return self._failure(start, stderr.decode().strip())
-                except Exception as ex:
-                    return self._failure(start, str(ex))
-
-                self._cached_routes = (self._cached_routes - set(remove_cidrs)) | set(add_cidrs)
-                self._last_sync = datetime.now(UTC)
-                return SyncResult(
-                    driver_name=self.driver_name,
-                    added_count=len(add_cidrs),
-                    removed_count=len(remove_cidrs),
-                    total_active=len(self._cached_routes),
-                    duration_ms=round((time.perf_counter() - start) * 1000.0, 2),
-                    success=True,
-                    error_message=None,
-                )
-
-        return self._failure(start, "Gateway unavailable: no control socket or local nft transport")
+        return self._failure(start, "Gateway control socket unavailable")
 
     def _failure(self, start: float, message: str) -> SyncResult:
         """Build a failed SyncResult without mutating the cached state."""
@@ -273,24 +197,17 @@ class VirtualGatewayDriver(BaseRouterDriver):
         """Inspect the sidecar through the socket, falling back to local nftables."""
         response = await self._socket_request({"cmd": "status"})
         if response is not None:
-            return self._status_from_socket(response)
+            self._status = self._status_from_socket(response)
+            return self._status
 
-        nft_path = self._nft_binary()
-        details: dict[str, Any] = {
-            "transport": "local_nft" if nft_path else "unavailable",
-            "socket_path": self.socket_path() or "none",
-            "nft_available": nft_path is not None,
-            "set_name": self.set_name,
-            "binary_path": nft_path or "none",
-        }
-        health = DriverHealth.DEGRADED if nft_path else DriverHealth.UNHEALTHY
-        return DriverStatus(
-            driver_name=self.driver_name,
-            health=health,
-            active_routes_count=len(self._cached_routes),
-            last_sync=self._last_sync,
-            details=details,
+        self._status = DriverStatus(
+            self.driver_name,
+            DriverHealth.UNHEALTHY,
+            len(self._cached_routes),
+            self._last_sync,
+            {"transport": "unavailable"},
         )
+        return self._status
 
     def _status_from_socket(self, response: dict[str, Any]) -> DriverStatus:
         wireguard = response.get("wireguard") or {}
@@ -347,22 +264,5 @@ class VirtualGatewayDriver(BaseRouterDriver):
             if verified is None or not verified.get("ok") or verified.get("elements") != []:
                 raise RuntimeError("Gateway flush could not be verified")
         else:
-            nft = self._nft_binary()
-            if not nft:
-                raise RuntimeError("Gateway unavailable during teardown")
-            proc = await asyncio.create_subprocess_exec(
-                nft,
-                "flush",
-                "set",
-                "inet",
-                "tebypass",
-                self.set_name,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            _, stderr = await proc.communicate()
-            if proc.returncode != 0:
-                raise RuntimeError(stderr.decode().strip() or "nft flush failed")
-            if await self.get_current_routes(force=True):
-                raise RuntimeError("Local gateway flush could not be verified")
+            raise RuntimeError("Gateway control socket unavailable during teardown")
         self._cached_routes.clear()

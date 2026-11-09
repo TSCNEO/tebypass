@@ -1,36 +1,33 @@
-# Ejecución por fases de la auditoría
+# Fases de cierre del MVP 0.2
 
-## Fase 1 — Control fiable
+## Implementación
 
-Implementado:
-- Apagado gateway con protocolo correcto, comprobación remota y error si no se confirma.
-- Eliminación UniFi con comprobación posterior y errores propagados.
-- Sin éxito simulado en drivers operativos; MikroTik se declara sin implementar.
-- Motor compartido por la API y exclusión de escrituras entre motores, purga y ajustes.
-- Driver fijo durante un ciclo y eventos de fallo de observación/apagado.
-- Desconocido se representa como `total_active=-1` en resultados fallidos.
+1. **Control fiable:** apagado verificado, errores explícitos y escritores serializados.
+2. **Fuente comunitaria:** snapshot global/destinos separados, lógica fijada de stopliga,
+   frescura, límites, ETag y preservación del último válido con error visible.
+3. **Motor operativo:** retención DNS persistida, purga de expirados, unión normalizada,
+   CRUD reactivo, intervalo 0 reactivable y transición de configuración controlada.
+4. **UniFi/gateway:** política completa, observación y comprobación posterior; WireGuard
+   validado/aplicado/retirado por el sidecar y ruta de descarte fail-closed.
+5. **Routers:** Omada/OPNsense con adaptador de backend upstream fijado y MikroTik REST con
+   reglas hacia tabla preparada. UI y credenciales cifradas. No son stubs ni emuladores.
+6. **Producto y entrega:** autenticación, salud detallada, assets locales, dependencias con
+   hashes, build versionado, horario comunitario y webhook opcionales; documentación sustituida.
 
-Validación local: 83 tests, Ruff y Mypy correctos en Python 3.12. Se corrigió también
-el aislamiento de SyncEvent entre pruebas. Usar un basetemp corto para sockets en macOS.
-Pruebas HTTP de lectura del despliegue existente: panel, liveness, versión, estado y
-OpenAPI responden HTTP 200. No se almacenan datos privados del entorno en el repositorio.
+## Evidencias
 
-Desplegado por SSH con Docker Compose, tras copia consistente de SQLite y conservación de
-la imagen anterior. Contenedor en ejecución y healthy; panel/API operativos y sonda UniFi
-correcta. Cuatro comprobaciones adicionales dentro de la imagen desplegada verifican los
-rechazos de drivers sin configuración/implementación y el protocolo de teardown, usando
-transporte simulado para evitar modificar reglas reales. El apagado de una regla real
-queda pendiente de una prueba operativa controlada; no se acredita mediante esas sondas.
+- Fase 1 se desplegó y validó con 83 tests más sondas HTTP/conectividad UniFi.
+- El cierre del MVP amplía los tests de señal global, retención real en el motor,
+  autenticación/CSRF, validación WireGuard, reglas RouterOS, adaptadores y horarios/webhook.
+- La suite externa de stopliga para Omada e integración se ejecutó sobre la revisión fijada:
+  **66 pruebas correctas**. No se copiaron sus destinos reales a fixtures del proyecto.
+- La verificación final del contenedor Linux, UI, despliegue y política UniFi se registra
+  al cerrar la entrega. No se almacena configuración ni infraestructura privada en Git.
 
-Pendiente: contrato completo de políticas, transición de configuración y telemetría
-observada; no se consideran resueltos por serializar las escrituras. Continúan en las
-siguientes fases del plan de auditoría.
+## Límites de aceptación
 
-## Fase 2 — Feed comunitario
-
-Pendiente: snapshot con estado global separado de destinos, frescura, límites y
-tratamiento explícito de errores. Ausencia de bloqueo comunitario no afecta a manuales.
-
-## Fases 3–6
-
-Ver prioridades y criterios de aceptación en AUDIT-2026-11-09.md.
+Un MVP funcional no certifica todos los modelos/firmwares. Los escenarios de Omada,
+OPNsense y MikroTik usan mocks/contratos y backend upstream; la evidencia física disponible
+es UniFi. El test kernel del gateway es aislado, sin afirmar transporte por un proveedor
+WireGuard real. IPv6 de gateway, sidecar remoto, políticas múltiples y formatos UniFi legacy
+quedan fuera del alcance declarado del MVP, en ROADMAP.md.

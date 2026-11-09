@@ -42,7 +42,7 @@ NFT_BIN = shutil.which("nft") or "/usr/sbin/nft"
 IP_BIN = shutil.which("ip") or "/sbin/ip"
 WG_BIN = shutil.which("wg") or "/usr/bin/wg"
 
-MAX_LINE_BYTES = 256 * 1024
+MAX_LINE_BYTES = 2 * 1024 * 1024
 CMD_TIMEOUT_SECONDS = 10.0
 
 
@@ -252,6 +252,34 @@ async def collect_status() -> dict[str, Any]:
     }
 
 
+try:
+    from wireguard_runtime import WireGuardRuntime
+except ImportError:
+    from gateway.wireguard_runtime import WireGuardRuntime
+
+_runtime: WireGuardRuntime | None = None
+
+
+def wireguard_runtime() -> WireGuardRuntime:
+    global _runtime
+    if _runtime is None:
+        _runtime = WireGuardRuntime(run_command)
+    return _runtime
+
+
+async def handle_reload(_message: dict[str, Any]) -> dict[str, Any]:
+    await wireguard_runtime().reload()
+    return {"ok": True, "applied": True}
+
+
+async def handle_policy(message: dict[str, Any]) -> dict[str, Any]:
+    fail_closed = message.get("fail_closed", True)
+    if not isinstance(fail_closed, bool):
+        raise GatewayError("fail_closed must be boolean")
+    await wireguard_runtime().policy(fail_closed)
+    return {"ok": True}
+
+
 # --------------------------------------------------------------------------- #
 # Commands
 # --------------------------------------------------------------------------- #
@@ -320,6 +348,8 @@ async def handle_sync(message: dict[str, Any]) -> dict[str, Any]:
 
 
 COMMANDS = {
+    "reload": handle_reload,
+    "policy": handle_policy,
     "status": handle_status,
     "list": handle_list,
     "flush": handle_flush,
@@ -359,6 +389,7 @@ class ControlServer:
     def __init__(self, socket_path: str) -> None:
         self.socket_path = socket_path
         self._server: asyncio.AbstractServer | None = None
+        self._command_lock = asyncio.Lock()
 
     async def start(self) -> None:
         path = Path(self.socket_path)
@@ -409,7 +440,8 @@ class ControlServer:
                 if not isinstance(message, dict):
                     response = {"ok": False, "error": "request must be a JSON object"}
                 else:
-                    response = await dispatch(message)
+                    async with self._command_lock:
+                        response = await dispatch(message)
             writer.write(json.dumps(response).encode("utf-8") + b"\n")
             await writer.drain()
         except TimeoutError:
@@ -431,6 +463,12 @@ async def amain() -> int:
     )
     socket_path = os.environ.get("TEBYPASS_GATEWAY_SOCKET", DEFAULT_SOCKET_PATH)
     server = ControlServer(socket_path)
+    await wireguard_runtime().policy(True)
+    if wireguard_runtime().source.is_file():
+        try:
+            await wireguard_runtime().reload()
+        except Exception:
+            LOG.error("WireGuard startup failed; fail-closed policy remains installed")
     await server.start()
 
     stop = asyncio.Event()

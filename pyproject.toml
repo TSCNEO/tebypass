@@ -1,6 +1,6 @@
 [project]
 name = "tebypass"
-version = "0.1.1"
+version = "0.2.0"
 description = "Agnostic, modular L3 split-routing bypass engine for arbitrary network endpoints"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -9,6 +9,7 @@ authors = [
     { name = "TeByPass Contributors" }
 ]
 dependencies = [
+    "stopliga @ https://github.com/jcastro/stopliga/archive/2ef9357702044367ff81b1bec51d77862c725764.tar.gz",
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
     "pydantic>=2.9.0",

@@ -4,84 +4,35 @@ import json
 
 from app.core.feeds import FeedManager, ParsedTarget
 
-HAYAHORA_PAYLOAD = {
-    "lastUpdate": "2026-11-09 07:07:25Z",
-    "data": [
-        {
-            "ip": "198.51.100.10",
-            "isp": "ISP_A",
-            "description": "Cloudflare",
-            "stateChanges": [
-                {"timestamp": "2026-11-08 21:27:55Z", "state": True},
-                {"timestamp": "2026-11-08 23:09:05Z", "state": False},
-            ],
-        },
-        {
-            "ip": "203.0.113.20",
-            "isp": "ISP_B",
-            "description": "Edge cache",
-            "stateChanges": [
-                {"timestamp": "2026-11-08 23:09:05Z", "state": False},
-                {"timestamp": "2026-11-09 06:00:00Z", "state": True},
-            ],
-        },
-    ],
-}
-
 
 def _values(targets: list[ParsedTarget]) -> list[str]:
     return [target.value for target in targets]
 
 
-def test_hayahora_only_active_when_force_active_disabled() -> None:
-    """The latest stateChange decides whether an entry is currently blocked."""
+def test_hayahora_global_signal_controls_contribution() -> None:
+    from tests.test_community_snapshot import payload
+
     manager = FeedManager()
-    payload = json.dumps(HAYAHORA_PAYLOAD)
-
-    strict = manager.parse_content(payload, feed_format="hayahora", force_active=False)
-    assert _values(strict) == ["203.0.113.20/32"]
-
-    forced = manager.parse_content(payload, feed_format="hayahora", force_active=True)
-    assert _values(forced) == ["198.51.100.10/32", "203.0.113.20/32"]
+    assert manager.parse_content(json.dumps(payload(False)), "hayahora") == []
+    assert _values(manager.parse_content(json.dumps(payload(True)), "hayahora")) == [
+        "198.51.100.7/32"
+    ]
 
 
-def test_hayahora_isp_filter_is_exact_and_case_insensitive() -> None:
-    """The ISP filter matches the isp field exactly, ignoring case."""
-    manager = FeedManager()
-    payload = json.dumps(HAYAHORA_PAYLOAD)
+def test_force_overrides_global_signal_but_keeps_recent_destinations() -> None:
+    from tests.test_community_snapshot import payload
 
-    filtered = manager.parse_content(
-        payload,
-        feed_format="hayahora",
-        force_active=True,
-        isp_filter="isp_a",
-    )
-    assert _values(filtered) == ["198.51.100.10/32"]
-
-    unmatched = manager.parse_content(
-        payload,
-        feed_format="hayahora",
-        force_active=True,
-        isp_filter="ISP_A_PARTIAL",
-    )
-    assert unmatched == []
+    assert _values(FeedManager().parse_content(json.dumps(payload(False)), "hayahora", True)) == [
+        "198.51.100.7/32"
+    ]
 
 
-def test_hayahora_is_auto_detected_on_json_feeds() -> None:
-    """A HayAHora document parsed as plain json is still recognised by structure."""
-    manager = FeedManager()
-    targets = manager.parse_content(json.dumps(HAYAHORA_PAYLOAD), feed_format="json")
-    assert len(targets) == 2
-    assert "Cloudflare · ISP_A" in targets[0].description
+def test_missing_history_does_not_create_active_destinations() -> None:
+    from tests.test_community_snapshot import payload
 
-
-def test_hayahora_entry_without_state_changes_is_kept() -> None:
-    """Entries without history are kept: absence of state is not proof of normality."""
-    manager = FeedManager()
-    payload = json.dumps({"data": [{"ip": "192.0.2.7", "isp": "ISP_C"}]})
-
-    targets = manager.parse_content(payload, feed_format="hayahora", force_active=False)
-    assert _values(targets) == ["192.0.2.7/32"]
+    data = payload(True)
+    data["data"] = [{"ip": "192.0.2.7", "isp": "ISP_A"}]
+    assert FeedManager().parse_content(json.dumps(data), "hayahora") == []
 
 
 def test_parse_entry_classifies_rfc5737_cidr() -> None:

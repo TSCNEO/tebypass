@@ -1,3 +1,5 @@
+> Registro histórico. Para el estado vigente prevalecen ADR-013, README y PHASES.md; las capacidades de diseños anteriores no implican implementación o validación actual.
+
 # TeByPass — Registro de Decisiones de Arquitectura (ADR)
 
 Este documento recopila las decisiones de arquitectura formalizadas (Architecture Decision Records) que rigen el diseño y la evolución técnica de **TeByPass**.
@@ -265,3 +267,23 @@ primer soporte UniFi, pero su afirmación de paridad completa queda retirada: fa
 formatos adicionales y las garantías identificadas en la auditoría. El contrato completo
 por política y las transiciones entre drivers se desarrollarán en entregas posteriores.
 El bloqueo es por proceso: el despliegue soportado usa un único worker de control.
+
+---
+
+## ADR-013: Alcance verificable del MVP 0.2
+
+**Aceptado.** Las decisiones previas son históricas; las afirmaciones de paridad completa,
+emulación de drivers operativos o sidecar remoto quedan sustituidas por este alcance.
+
+- Dependencia stopliga fijada a `2ef9357702044367ff81b1bec51d77862c725764`, sin copiar
+  destinos reales a fixtures. Se reutilizan señal global y backends Omada/OPNsense; se
+  aíslan sus operaciones síncronas fuera del event loop y se verifica estado efectivo.
+- Una política completa por instalación. Manuales y comunidad aportan a la misma unión,
+  con activación comunitaria independiente y retención por destino persistida.
+- Los endpoints CRUD delegan en servicios de core con errores independientes de HTTP.
+- Gateway exclusivamente Unix/volumen local. El controlador controla WireGuard y nft;
+  ruta unreachable como barrera fail-closed. El modo local/emulado queda retirado.
+- Token administrativo aleatorio en volumen y sesiones firmadas. Assets locales y
+  dependencias/hash fijados; versión del build en lugar de `.git` montado.
+- Documentación vigente distingue implementación, pruebas sintéticas, pruebas de kernel
+  y evidencia en hardware; ningún soporte nuevo se anuncia como certificado universalmente.

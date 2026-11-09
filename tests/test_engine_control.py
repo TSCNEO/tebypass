@@ -72,7 +72,7 @@ async def test_separate_engines_share_one_writer_lock(db_ready: None) -> None:
         release.set()
         results = await asyncio.gather(first, second)
     assert all(result.success for result in results)
-    assert calls == 2
+    assert calls == 4
 
 
 async def test_failed_purge_does_not_claim_success_or_pause(

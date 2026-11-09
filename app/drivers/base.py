@@ -73,6 +73,18 @@ class BaseRouterDriver(ABC):
         """Apply incremental route changes idempotently."""
         pass
 
+    async def apply_policy(self, targets: set[TargetCIDR], enabled: bool) -> SyncResult:
+        """Observe, apply the desired policy and verify effective destination membership."""
+        current = await self.get_current_routes(force=True)
+        desired = {target.cidr for target in targets} if enabled else set()
+        result = await self.sync_routes(
+            {target for target in targets if target.cidr not in current} if enabled else set(),
+            current - desired,
+        )
+        if result.success and await self.get_current_routes(force=True) != desired:
+            raise RuntimeError("Router did not retain the desired routes")
+        return result
+
     @abstractmethod
     async def health_check(self) -> DriverStatus:
         """Perform a connectivity check and return operational status."""

@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class TargetBase(BaseModel):
@@ -21,9 +21,20 @@ class TargetBase(BaseModel):
 
 
 class TargetCreate(TargetBase):
-    """Request payload for creating a new target."""
+    """Request payload for a normalized, validated network destination."""
 
-    pass
+    @model_validator(mode="after")
+    def validate_destination(self) -> "TargetCreate":
+        from app.core.feeds import FeedManager
+
+        parsed = FeedManager().parse_entry(self.value)
+        if parsed is None or (
+            self.destination_type and self.destination_type != parsed.destination_type
+        ):
+            raise ValueError("Invalid destination or destination type mismatch")
+        self.value = parsed.value
+        self.destination_type = parsed.destination_type
+        return self
 
 
 class TargetUpdate(BaseModel):
@@ -102,7 +113,23 @@ class FeedBase(BaseModel):
 
     name: str = Field(..., description="Human-readable feed label")
     url: str = Field(..., description="Remote HTTPS/HTTP endpoint URL")
-    format: str = Field(default="json", description="Feed format: json, plaintext, stopliga")
+    format: str = "json"
+
+    @field_validator("format")
+    @classmethod
+    def validate_format(cls, value: str) -> str:
+        if value not in {"json", "plaintext", "hayahora", "stopliga"}:
+            raise ValueError("Unsupported feed format")
+        return value
+
+    @field_validator("url")
+    @classmethod
+    def validate_feed_url(cls, value: str) -> str:
+        from app.core.feed_http import validate_url
+
+        validate_url(value)
+        return value
+
     enabled: bool = Field(default=True, description="Whether feed is queried during scheduled sync")
 
 
@@ -119,6 +146,10 @@ class FeedResponse(FeedBase):
     last_fetched_at: datetime | None = None
     created_at: datetime
     targets_count: int = 0
+    blocked: bool | None = None
+    source_updated_at: datetime | None = None
+    last_checked_at: datetime | None = None
+    last_error: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -162,6 +193,11 @@ class SystemStatusResponse(BaseModel):
     total_resolved_ips: int
     active_routes: int
     sliding_window_seconds: int
+    routing_enabled: bool = True
+    last_sync_success: bool | None = None
+    last_sync_error: str | None = None
+    last_attempt_at: datetime | None = None
+    feed_errors: int = 0
 
 
 class PinVerifyRequest(BaseModel):
@@ -223,3 +259,4 @@ class WireGuardUploadResponse(BaseModel):
     configured: bool
     peers: int
     uploaded_at: str
+    applied: bool = False

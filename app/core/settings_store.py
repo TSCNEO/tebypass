@@ -22,17 +22,30 @@ SECRET_KEYS: Final[set[str]] = {
     "unifi_api_key",
     "unifi_password",
     "mikrotik_password",
+    "omada_client_secret",
+    "notification_token",
+    "opnsense_api_key",
+    "opnsense_api_secret",
 }
 
 MASKED_SECRET: Final[str] = "***saved***"
 
-_INT_KEYS: Final[set[str]] = {"sync_interval_seconds", "sliding_window_seconds"}
+_INT_KEYS: Final[set[str]] = {
+    "sync_interval_seconds",
+    "sliding_window_seconds",
+    "feed_max_age_seconds",
+    "feed_lookback_hours",
+    "feed_max_targets",
+}
 _BOOL_KEYS: Final[set[str]] = {
     "feed_force_active",
     "gateway_fail_closed",
     "resolve_ipv6",
     "routing_enabled",
     "unifi_verify_tls",
+    "omada_verify_tls",
+    "opnsense_verify_tls",
+    "mikrotik_verify_tls",
 }
 # Bootstrap/internal keys: not editable from the UI (changing them at runtime cannot take effect)
 _NON_EDITABLE_KEYS: Final[set[str]] = {
@@ -123,7 +136,7 @@ def _is_masked_or_empty(key: str, raw: Any) -> bool:
         return True
     if isinstance(raw, str):
         stripped = raw.strip()
-        if not stripped:
+        if not stripped and key in SECRET_KEYS:
             return True
         if key in SECRET_KEYS and stripped == MASKED_SECRET:
             return True
@@ -199,8 +212,72 @@ async def _save_settings(payload: dict[str, Any]) -> None:
 
     if not updates:
         return
+    candidate = Settings.model_validate({**settings.model_dump(), **updates})
+    if (
+        candidate.feed_lookback_hours < 1
+        or candidate.feed_max_targets < 1
+        or candidate.feed_max_age_seconds < 60
+    ):
+        raise ValueError("Feed lookback/limits must be positive (age >= 60 seconds)")
+    if candidate.resolve_ipv6 and candidate.router_driver in {"virtual_gateway", "mikrotik"}:
+        raise ValueError("This driver supports IPv4 only")
+    from app.core.feed_http import validate_url
+    from app.core.schedule import community_schedule
+
+    try:
+        community_schedule(candidate)
+        validate_url(candidate.hayahora_feed_url)
+        if candidate.notification_url:
+            validate_url(candidate.notification_url)
+            if not candidate.notification_url.startswith("https://"):
+                raise ValueError("Webhook must use HTTPS")
+    except Exception as ex:
+        raise ValueError("Invalid schedule, feed URL or webhook URL") from ex
+    from app.drivers import get_driver
+
+    driver_keys = {
+        key
+        for key in updates
+        if key == "router_driver"
+        or key.startswith(("unifi_", "mikrotik_", "omada_", "opnsense_", "gateway_"))
+    }
+    changed_driver = any(getattr(settings, key) != updates[key] for key in driver_keys)
+    identity_keys = {
+        "router_driver",
+        "unifi_controller_url",
+        "unifi_site",
+        "unifi_route_name",
+        "omada_base_url",
+        "omada_site",
+        "omada_route_name",
+        "opnsense_host",
+        "opnsense_route_name",
+        "mikrotik_api_url",
+        "mikrotik_address_list",
+        "opnsense_alias_name",
+    }
+    if any(
+        key in identity_keys and getattr(settings, key) != value for key, value in updates.items()
+    ):
+        await get_driver().teardown()
+    if changed_driver:
+        await get_driver().close()
 
     async with AsyncSessionLocal() as session:
+        if "hayahora_feed_url" in updates:
+            from app.core.feed_http import validate_url
+            from app.db.models import Feed
+
+            validate_url(updates["hayahora_feed_url"])
+            feeds = (
+                (await session.execute(select(Feed).where(Feed.url == settings.hayahora_feed_url)))
+                .scalars()
+                .all()
+            )
+            for feed in feeds:
+                feed.url = updates["hayahora_feed_url"]
+                feed.etag = None
+                feed.last_fetched_at = None
         for key, value in updates.items():
             existing = await session.get(AppSetting, key)
             serialized = _serialize(value)
@@ -217,7 +294,12 @@ async def _save_settings(payload: dict[str, Any]) -> None:
     for key, value in updates.items():
         setattr(settings, key, value)
 
-    invalidate_driver()
+    if changed_driver:
+        invalidate_driver()
+    from app.core.runtime import engine_instance
+
+    if engine_instance is not None:
+        engine_instance.wake()
     logger.info("Persisted settings: %s", ", ".join(sorted(updates)))
 
 

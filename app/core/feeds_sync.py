@@ -4,20 +4,21 @@ This module keeps the reconciliation engine decoupled from HTTP details and from
 feed format: the engine only asks "refresh whatever is due" and gets a count back.
 """
 
+import json
 import logging
 from datetime import UTC, datetime, timedelta
 
-import httpx
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.community import parse_snapshot
 from app.core.config import settings
+from app.core.feed_http import download
 from app.core.feeds import FeedManager
+from app.core.targets import as_utc
 from app.db.models import Feed, Target
 
 logger = logging.getLogger("tebypass.feeds_sync")
-
-USER_AGENT = "TeByPass/0.1.0 (+https://github.com/TSCNEO/tebypass)"
 
 
 async def refresh_feed(session: AsyncSession, feed: Feed, force: bool = False) -> int:
@@ -29,34 +30,44 @@ async def refresh_feed(session: AsyncSession, feed: Feed, force: bool = False) -
     now = datetime.now(UTC)
     manager = FeedManager()
 
-    headers = {"User-Agent": USER_AGENT}
-    if feed.etag and not force:
-        headers["If-None-Match"] = feed.etag
-
+    feed.last_checked_at = now
     try:
-        async with httpx.AsyncClient(timeout=manager.timeout) as client:
-            response = await client.get(feed.url, headers=headers)
-    except Exception as ex:  # noqa: BLE001 - a dead feed must not break the sync loop
-        logger.warning("Feed '%s' download failed: %s", feed.name, ex)
-        return 0
-
-    if response.status_code == 304:
-        feed.last_fetched_at = now
+        content, new_etag = await download(feed.url, None if force else feed.etag)
+        if content is None:
+            if (
+                feed.source_updated_at
+                and (now - as_utc(feed.source_updated_at)).total_seconds()
+                > settings.feed_max_age_seconds
+            ):
+                raise ValueError("Community feed is stale")
+            feed.last_fetched_at = now
+            feed.last_error = None
+            await session.commit()
+            return 0
+        payload = json.loads(content) if feed.format != "plaintext" else None
+        community = feed.format in {"hayahora", "stopliga"} or (
+            isinstance(payload, dict) and isinstance(payload.get("data"), list)
+        )
+        if community:
+            snapshot = parse_snapshot(payload, settings.feed_force_active, settings.feed_isp_filter)
+            parsed = [
+                item for value in snapshot.destinations if (item := manager.parse_entry(value))
+            ]
+            feed.blocked = snapshot.blocked
+            feed.source_updated_at = snapshot.updated_at
+        else:
+            parsed = manager.parse_content(content, feed_format=feed.format)
+            feed.blocked = None
+            feed.source_updated_at = None
+        if len(parsed) > settings.feed_max_targets:
+            raise ValueError("Feed exceeds target safety ceiling")
+    except Exception as ex:
+        # Keep the last valid contribution on unknown/error; never reinterpret it as OFF.
+        feed.last_error = f"Feed refresh failed ({type(ex).__name__})"
         await session.commit()
-        logger.info("Feed '%s' unchanged (HTTP 304)", feed.name)
+        logger.warning("Feed refresh rejected (%s)", type(ex).__name__)
         return 0
-
-    if response.status_code >= 400:
-        logger.warning("Feed '%s' returned HTTP %s", feed.name, response.status_code)
-        return 0
-
-    new_etag = response.headers.get("etag")
-    parsed = manager.parse_content(
-        response.text,
-        feed_format=feed.format,
-        force_active=settings.feed_force_active,
-        isp_filter=settings.feed_isp_filter,
-    )
+    feed.last_error = None
 
     await session.execute(delete(Target).where(Target.feed_id == feed.id))
 
@@ -78,8 +89,7 @@ async def refresh_feed(session: AsyncSession, feed: Feed, force: bool = False) -
         imported += 1
 
     feed.last_fetched_at = now
-    if new_etag:
-        feed.etag = new_etag
+    feed.etag = new_etag
     await session.commit()
 
     logger.info("Feed '%s' refreshed: %d targets", feed.name, imported)
