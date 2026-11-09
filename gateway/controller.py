@@ -113,6 +113,20 @@ def canonical_elements(elements: list[str]) -> list[str]:
     return sorted(canonical)
 
 
+def _format_raw_elem(elem: Any) -> str:
+    if isinstance(elem, str):
+        return elem
+    if isinstance(elem, dict):
+        if "prefix" in elem and isinstance(elem["prefix"], dict):
+            addr = elem["prefix"].get("addr")
+            length = elem["prefix"].get("len")
+            if addr is not None and length is not None:
+                return f"{addr}/{length}"
+        if "range" in elem and isinstance(elem["range"], list) and len(elem["range"]) == 2:
+            return f"{elem['range'][0]}-{elem['range'][1]}"
+    return str(elem)
+
+
 def parse_set_elements(payload: str) -> list[str]:
     """Extract the element list from ``nft -j list set`` output."""
     try:
@@ -126,7 +140,7 @@ def parse_set_elements(payload: str) -> list[str]:
             continue
         entry = item.get("set")
         if isinstance(entry, dict) and isinstance(entry.get("elem"), list):
-            elements.extend(str(element) for element in entry["elem"])
+            elements.extend(_format_raw_elem(element) for element in entry["elem"])
     return sorted(set(elements))
 
 

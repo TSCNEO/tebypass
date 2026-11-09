@@ -113,7 +113,7 @@ def test_parse_set_elements_reads_nft_json() -> None:
                     "set": {
                         "family": "inet",
                         "name": "tebypass_targets",
-                        "elem": ["198.51.100.0/24", "203.0.113.7"],
+                        "elem": [{"prefix": {"addr": "198.51.100.0", "len": 24}}, "203.0.113.7"],
                     }
                 },
             ]
