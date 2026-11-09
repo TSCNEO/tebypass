@@ -114,4 +114,5 @@ Toda la documentación y ejemplos del sistema utilizan rangos de red e identific
 1. **Rendimiento**: Resolución y cómputo de diferencias de 5,000 IPs en menos de 200 ms.
 2. **Resiliencia**: Si el feed remoto no está disponible, el sistema mantiene el último estado válido almacenado en SQLite WAL sin degradar el tráfico local.
 3. **Consumo de Recursos**: < 64 MB de memoria RAM en el proceso de Python y < 20 MB en el sidecar de gateway.
-4. **Seguridad**: Autenticación mediante PIN maestro para cualquier mutación de estado a través de la API o la UI.
+4. **Seguridad en Reposo**: Cifrado simétrico autenticado (AES-128-CBC + HMAC-SHA256) para todas las credenciales y API keys persistidas en SQLite, con enmascarado total en API/UI.
+5. **Control de Acceso**: Autenticación opcional mediante PIN maestro para mutaciones administrativas a través de la API o la UI.

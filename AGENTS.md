@@ -43,7 +43,7 @@ Estas reglas tienen **prioridad máxima e incondicional**. Su violación comprom
     - `edge-node-01.example.net`
 
 ### 2.3 100% Agnóstico a la Red
-El software no asume topologías de red fijas. Toda dirección IP, interfaz, subred y credencial se inyecta mediante variables de entorno configurables con prefijo `TEBYPASS_`.
+El software no asume topologías de red fijas. Las variables base de arranque (`TEBYPASS_PORT`, `TEBYPASS_DATABASE_URL`) se inyectan como bootstrap mínimo, y toda la configuración operativa (routers, credenciales cifradas en reposo, intervalos de sincronización, feeds e IPs) se gestiona de forma reactiva y persistente directamente desde la interfaz web.
 
 ---
 
