@@ -14,15 +14,16 @@ Construye `ghcr.io/tscneo/tebypass` y `ghcr.io/tscneo/tebypass-gateway` para Lin
 arm64, con SHA del código, versión, licencia, SBOM y procedencia de build. Usa GITHUB_TOKEN
 con permiso packages:write solo en jobs de publicación; no requiere PAT en secrets.
 
-Primero publica `sha-<12 caracteres>`. Un runner descarga esas imágenes e instala el
+Primero publica `build-<run>-<attempt>`, único por ejecución para evitar colisiones
+entre main y tags que compartan commit. Un runner descarga esas imágenes e instala el
 Compose sin build: comprueba liveness, autenticación, guardado, rechazo de origen ajeno,
 versión embebida y pruebas reales del gateway. Solo después promueve canales/versiones:
 
 | Referencia | Etiquetas |
 |---|---|
-| main | edge, sha del build |
-| v0.2.0-rc.1 | 0.2.0-rc.1, sha del build; no latest |
-| v0.2.0 | 0.2.0, latest, sha del build |
+| main | edge, sha de 12 caracteres |
+| v0.2.0-rc.2 | 0.2.0-rc.2; no latest |
+| v0.2.0 | 0.2.0, latest |
 
 La versión base del tag debe coincidir con pyproject.toml. No reutilices tags de release
 ni versiones publicadas: una corrección debe tener otro número. No se despliega en tu
@@ -52,8 +53,8 @@ Si la release ya existe, adjunta/actualiza esos assets. Main no crea releases.
 Ejemplo del mantenedor para una candidata, no ejecutado como parte de esta preparación:
 
 ```sh
-git tag -a v0.2.0-rc.1 -m 'TeByPass 0.2.0 release candidate 1'
-git push origin v0.2.0-rc.1
+git tag -a v0.2.0-rc.2 -m 'TeByPass 0.2.0 release candidate 1'
+git push origin v0.2.0-rc.2
 ```
 
 GitHub limita el cambio inicial de visibilidad de paquetes a sus ajustes; el flujo no

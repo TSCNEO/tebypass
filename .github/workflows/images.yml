@@ -30,6 +30,7 @@ jobs:
       version: ${{ steps.info.outputs.version }}
       tag: ${{ steps.info.outputs.tag }}
       revision: ${{ steps.info.outputs.revision }}
+      commit_tag: ${{ steps.info.outputs.commit_tag }}
     steps:
       - uses: actions/checkout@v4
       - id: info
@@ -38,6 +39,8 @@ jobs:
           REF_TYPE: ${{ github.ref_type }}
           REF_NAME: ${{ github.ref_name }}
           COMMIT: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
           python3 - <<'PY'
           import os, re, tomllib
@@ -54,7 +57,8 @@ jobs:
               output.write(f'image=ghcr.io/{os.environ["REPOSITORY"].lower()}\n')
               output.write(f'version={tag[1:] if tag else version}\n')
               output.write(f'tag={tag}\n')
-              output.write(f'revision=sha-{os.environ["COMMIT"][:12]}\n')
+              output.write(f'revision=build-{os.environ["RUN_ID"]}-{os.environ["RUN_ATTEMPT"]}\n')
+              output.write(f'commit_tag=sha-{os.environ["COMMIT"][:12]}\n')
           PY
 
   publish:
@@ -113,6 +117,7 @@ jobs:
       TEBYPASS_IMAGE_TAG: ${{ needs.metadata.outputs.revision }}
       TEBYPASS_IMAGE_PREFIX: ${{ needs.metadata.outputs.image }}
       EXPECTED_COMMIT: ${{ github.sha }}
+      EXPECTED_VERSION: ${{ needs.metadata.outputs.version }}
     steps:
       - uses: actions/checkout@v4
       - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
@@ -167,6 +172,7 @@ jobs:
           flavor: latest=false
           tags: |
             type=raw,value=edge,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=${{ needs.metadata.outputs.commit_tag }},enable=${{ github.ref == 'refs/heads/main' }}
             type=semver,pattern={{version}}
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-') }}
       - name: Promote verified images to version/channel tags

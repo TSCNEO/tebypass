@@ -336,7 +336,7 @@ La aplicación no obtiene acceso al socket Docker. Protección de origen basada 
 
 **Aceptado.** El Compose de instalación referencia imágenes, no contiene build. Un override
 explícito conserva el desarrollo desde código. App y sidecar se publican juntos para
-amd64/arm64 tras CI; se descargan y prueban por SHA antes de promover edge/version/latest.
+amd64/arm64 tras CI; se descargan y prueban por build único antes de promover edge/version/latest.
 La prueba de ejecución en GitHub es amd64. Las imágenes registran revisión y versión;
 no necesitan Git en runtime. SBOM y procedencia acompañan a los manifiestos.
 

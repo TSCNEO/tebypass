@@ -111,7 +111,8 @@ docker compose up -d --wait
 Si utilizas el sidecar, añade `--profile gateway` a ambos comandos. También puedes
 seleccionar una versión de ambas imágenes en `.env`, por ejemplo `TEBYPASS_IMAGE_TAG=0.2.0`.
 `latest` solo se promueve con tags estables; `edge` sigue main y no es un canal estable.
-Un tag `sha-<12 caracteres>` permite identificar exactamente un build. Las imágenes
+Los tags `sha-<12 caracteres>` identifican el código de main; `build-<run>-<attempt>`
+identifica una ejecución concreta, diferenciando builds de main y de release. Las imágenes
 son Linux amd64/arm64. El gateway requiere kernel Linux con nftables y WireGuard.
 
 Para rollback recupera el Compose/valor de versión anterior y repite pull/up. No elimines

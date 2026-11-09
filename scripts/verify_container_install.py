@@ -43,6 +43,7 @@ def main() -> None:
     assert request("/api/v1/settings", "PUT", {}, base) == settings
     version = request("/api/v1/version")
     assert version["commit"] == os.environ["EXPECTED_COMMIT"][:7]
+    assert version["base_version"] == os.environ["EXPECTED_VERSION"]
     try:
         request("/api/v1/settings", "PUT", {}, "https://other.example.org")
     except urllib.error.HTTPError as error:
