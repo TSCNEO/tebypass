@@ -87,28 +87,49 @@ En el modo gateway, el sidecar se levanta con el perfil `gateway`:
 docker compose --profile gateway up -d
 ```
 
-El sidecar necesita una **IP propia en tu LAN** para poder ser la puerta de enlace de los
-dispositivos que quieras desviar. Se consigue con una red `macvlan` sobre la interfaz del host, que
-se crea una sola vez:
+### Configuración del Gateway Virtual paso a paso
 
-```bash
-docker network create -d macvlan \
-  --subnet="$TEBYPASS_LAN_SUBNET" \
-  --gateway="$TEBYPASS_LAN_GATEWAY" \
-  -o parent="$TEBYPASS_LAN_PARENT" \
-  "$TEBYPASS_LAN_NETWORK"
-```
+1. **Elegir una IP libre en tu red**:
+   Busca una dirección IP desocupada dentro de tu rango local (por ejemplo `192.168.1.26`, fuera del rango de reparto dinámico del DHCP de tu router). Puedes comprobar si responde con un ping rápido:
+   ```bash
+   ping -c 2 192.168.1.26
+   ```
 
-y se le asigna una dirección libre de esa subred (por ejemplo `192.0.2.26`, un placeholder RFC 5737:
-pon la real en tu `.env`):
+2. **Crear la reserva fija en tu router (¡Importante!)**:
+   Para evitar que el router asigne esa misma IP a otro dispositivo en el futuro:
+   - Entra en la administración de tu router (UniFi, MikroTik, Keenetic o router de operadora).
+   - Ve a la sección de **DHCP / Clientes fijos**.
+   - Añade una reserva asignando la IP elegida a la MAC configurada (por defecto `02:42:c0:a8:01:1a` o la que definas en `TEBYPASS_GATEWAY_MAC`).
+   - Ponle como nombre o nota **`TeByPass-Gateway`** para tenerla siempre identificada.
 
-```bash
-TEBYPASS_GATEWAY_IP=192.0.2.26
-```
+3. **Crear la red `macvlan` en Docker**:
+   Se crea una sola vez sobre la interfaz del host conectada a tu red (ej. `eth0`):
+   ```bash
+   docker network create -d macvlan \
+     --subnet="192.168.1.0/24" \
+     --gateway="192.168.1.1" \
+     -o parent="eth0" \
+     tebypass-lan
+   ```
 
-La aplicación y el sidecar no hablan por red: comparten el volumen `/data` y se comunican por un
-socket Unix (`/data/gateway.sock`, permisos `0600`). El sidecar es el único que toca `nftables`, así
-que el contenedor de la aplicación no necesita privilegios de red.
+4. **Configurar tu `.env`**:
+   ```bash
+   TEBYPASS_GATEWAY_IP=192.168.1.26
+   TEBYPASS_GATEWAY_MAC=02:42:c0:a8:01:1a
+   TEBYPASS_LAN_NETWORK=tebypass-lan
+   ```
+
+5. **Subir tu túnel WireGuard**:
+   Sube tu archivo `wg0.conf` directamente desde la interfaz web de TeByPass (botón WireGuard en el menú superior) o colócalo en el volumen de datos.
+
+6. **Cómo usarlo en tus dispositivos de casa**:
+   - **En tu Smart TV, Fire TV, Apple TV o deco**: En los ajustes de red del dispositivo, cambia a IP estática. Mantén tu IP y DNS habitual, pero pon como **Puerta de Enlace / Gateway** la IP del Virtual Gateway (`192.168.1.26`). El tráfico normal seguirá saliendo directo por tu fibra y los destinos bloqueados saldrán por la VPN.
+   - **En tu Mac o PC (prueba rápida)**: Puedes probar sin cambiar la configuración de red de tu ordenador añadiendo una ruta temporal para el bloque que quieras verificar:
+     ```bash
+     sudo route add -net 203.0.113.0/24 192.168.1.26
+     ```
+
+La aplicación web y el sidecar gateway no se comunican por red: comparten el volumen `/data` y se comunican por un socket Unix seguro (`/data/gateway.sock`, permisos `0600`). El sidecar es el único que gestiona `nftables`, manteniendo el contenedor web completamente desacoplado y sin privilegios de red.
 
 ---
 

@@ -200,7 +200,9 @@ class VirtualGatewayDriver(BaseRouterDriver):
                 added_count=int(response.get("added_count", 0)),
                 removed_count=int(response.get("removed_count", 0)),
                 total_active=int(response.get("total_active", len(self._cached_routes))),
-                duration_ms=float(response.get("duration_ms", round((time.perf_counter() - start) * 1000.0, 2))),
+                duration_ms=float(
+                    response.get("duration_ms", round((time.perf_counter() - start) * 1000.0, 2))
+                ),
                 success=True,
                 error_message=None,
             )

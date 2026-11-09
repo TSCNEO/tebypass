@@ -218,7 +218,8 @@ async def nftables_state() -> dict[str, Any]:
         return {"table": True, "set": False, "elements": []}
 
     has_set = any(
-        isinstance(item, dict) and isinstance(item.get("set"), dict) for item in document.get("nftables", [])
+        isinstance(item, dict) and isinstance(item.get("set"), dict)
+        for item in document.get("nftables", [])
     )
     if not has_set:
         return {"table": True, "set": False, "elements": []}
@@ -333,7 +334,11 @@ async def dispatch(message: dict[str, Any]) -> dict[str, Any]:
         return {"ok": True, "pong": True}
     handler = COMMANDS.get(command)
     if handler is None:
-        return {"ok": False, "error": f"unknown command '{command}'", "commands": sorted([*COMMANDS, "ping"])}
+        return {
+            "ok": False,
+            "error": f"unknown command '{command}'",
+            "commands": sorted([*COMMANDS, "ping"]),
+        }
     try:
         return await handler(message)
     except GatewayError as ex:

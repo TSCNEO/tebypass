@@ -182,7 +182,9 @@ async def test_sync_adds_and_removes(nft_state: set[str]) -> None:
     assert nft_state == {"198.51.100.0/24"}
 
 
-async def test_sync_without_changes_skips_nftables(nft_state: set[str], monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_sync_without_changes_skips_nftables(
+    nft_state: set[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
     calls: list[str] = []
 
     async def spy(script: str) -> None:
@@ -195,7 +197,9 @@ async def test_sync_without_changes_skips_nftables(nft_state: set[str], monkeypa
     assert calls == []
 
 
-async def test_sync_falls_back_to_full_replace(nft_state: set[str], monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_sync_falls_back_to_full_replace(
+    nft_state: set[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
     scripts: list[str] = []
     real_apply = controller.apply_ruleset
 
@@ -229,7 +233,9 @@ async def test_flush_and_list(nft_state: set[str]) -> None:
     assert nft_state == set()
 
 
-async def test_status_reports_partial_state(monkeypatch: pytest.MonkeyPatch, nft_state: set[str]) -> None:
+async def test_status_reports_partial_state(
+    monkeypatch: pytest.MonkeyPatch, nft_state: set[str]
+) -> None:
     async def wg_up() -> dict[str, Any]:
         return {"present": True, "handshake_age": 12}
 

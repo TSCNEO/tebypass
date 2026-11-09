@@ -51,6 +51,7 @@ services:
     networks:
       tebypass-lan:
         ipv4_address: ${TEBYPASS_GATEWAY_IP:-192.0.2.26}
+    mac_address: ${TEBYPASS_GATEWAY_MAC:-02:42:c0:00:02:1a}
     profiles:
       - gateway
 
