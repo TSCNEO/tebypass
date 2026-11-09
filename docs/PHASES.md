@@ -64,3 +64,14 @@ DNS/HTTP por el túnel y completa subida y descarga de 256 KiB. Al eliminar la i
 del túnel, el destino seleccionado queda bloqueado; al retirar la selección recupera
 la salida normal. Los peers usan claves efímeras independientes de cualquier proveedor.
 Esta ampliación pasó sobre la imagen desplegada y se ejecuta mediante el mismo job de CI.
+
+## Acceso mediante Traefik HTTPS
+
+Se reprodujo el rechazo del guardado por origen distinto al terminar TLS en Traefik:
+HTTP interno y HTTPS del navegador no coincidían. Se añadió confianza explícita de la
+conexión del proxy en Uvicorn y normalización de origen/puertos, conservando el rechazo
+de orígenes ajenos. La configuración real del proxy permanece solo en el host de despliegue.
+
+Validado con **105 tests** y controles de calidad. Tras desplegar `6f1aa1a`, por el acceso
+HTTPS real: login 200 con cookie Secure, guardado 200 y origen ajeno 403. El backend quedó
+seleccionado como `virtual_gateway` en el entorno autorizado.
