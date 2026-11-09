@@ -26,6 +26,7 @@ import logging
 import os
 import shutil
 import signal
+import tempfile
 import time
 from pathlib import Path
 from typing import Any
@@ -41,6 +42,8 @@ MARK = "0x100"
 NFT_BIN = shutil.which("nft") or "/usr/sbin/nft"
 IP_BIN = shutil.which("ip") or "/sbin/ip"
 WG_BIN = shutil.which("wg") or "/usr/bin/wg"
+
+CHECKPOINT_PATH = Path(os.environ.get("TEBYPASS_GATEWAY_CHECKPOINT", "/data/gateway_targets.json"))
 
 MAX_LINE_BYTES = 2 * 1024 * 1024
 CMD_TIMEOUT_SECONDS = 10.0
@@ -303,8 +306,30 @@ async def handle_list(_message: dict[str, Any]) -> dict[str, Any]:
     return {"ok": True, "elements": elements, "total": len(elements)}
 
 
+def save_checkpoint(elements: list[str]) -> None:
+    """Persist the confirmed target set with restrictive permissions for sidecar restart."""
+    CHECKPOINT_PATH.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    fd, name = tempfile.mkstemp(dir=CHECKPOINT_PATH.parent, prefix=".targets-")
+    path = Path(name)
+    try:
+        with os.fdopen(fd, "w") as handle:
+            json.dump(elements, handle)
+        os.replace(path, CHECKPOINT_PATH)
+    finally:
+        path.unlink(missing_ok=True)
+
+
+async def restore_checkpoint() -> None:
+    if CHECKPOINT_PATH.exists():
+        values = json.loads(CHECKPOINT_PATH.read_text())
+        if not isinstance(values, list) or not all(isinstance(value, str) for value in values):
+            raise GatewayError("Invalid target checkpoint")
+        await apply_ruleset(build_replace_script([normalize_cidr(value) for value in values]))
+
+
 async def handle_flush(_message: dict[str, Any]) -> dict[str, Any]:
     await apply_ruleset(f"flush set {TABLE} {SET_NAME}\n")
+    save_checkpoint([])
     return {"ok": True, "total": 0, "elements": []}
 
 
@@ -336,6 +361,8 @@ async def handle_sync(message: dict[str, Any]) -> dict[str, Any]:
         total = len(canonical_elements(await list_elements()))
     except GatewayError:
         total = len(desired)
+
+    save_checkpoint(desired)
 
     return {
         "ok": True,
@@ -463,12 +490,14 @@ async def amain() -> int:
     )
     socket_path = os.environ.get("TEBYPASS_GATEWAY_SOCKET", DEFAULT_SOCKET_PATH)
     server = ControlServer(socket_path)
+    await restore_checkpoint()
     await wireguard_runtime().policy(True)
     if wireguard_runtime().source.is_file():
         try:
             await wireguard_runtime().reload()
         except Exception:
             LOG.error("WireGuard startup failed; fail-closed policy remains installed")
+    await apply_ruleset(f"chain {TABLE} forward {{ policy accept; }}\n")
     await server.start()
 
     stop = asyncio.Event()

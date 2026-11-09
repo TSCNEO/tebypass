@@ -34,7 +34,10 @@ trap terminate SIGINT SIGTERM
 if [ "$(cat /proc/sys/net/ipv4/ip_forward)" != "1" ]; then
     sysctl -w net.ipv4.ip_forward=1 >/dev/null
 fi
-nft -f /etc/nftables/tebypass.conf
+if ! nft list table inet tebypass >/dev/null 2>&1; then
+    nft -f /etc/nftables/tebypass.conf
+fi
+nft 'chain inet tebypass forward { policy drop; }'
 # The controller installs fail-closed policy routing and owns tunnel reloads.
 
 # 4. Start the Unix domain socket control daemon shared with the application

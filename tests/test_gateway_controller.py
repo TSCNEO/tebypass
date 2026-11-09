@@ -358,3 +358,16 @@ async def test_socket_rejects_invalid_json(control_server: str) -> None:
     response = json.loads(line)
     assert response["ok"] is False
     assert "invalid JSON" in response["error"]
+
+
+@pytest.fixture(autouse=True)
+def checkpoint_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(controller, "CHECKPOINT_PATH", tmp_path / "targets.json")
+
+
+async def test_checkpoint_restores_targets_before_forwarding(nft_state: set[str]) -> None:
+    await controller.handle_sync({"add": ["198.51.100.7/32"], "remove": []})
+    assert controller.CHECKPOINT_PATH.stat().st_mode & 0o777 == 0o600
+    nft_state.clear()
+    await controller.restore_checkpoint()
+    assert "198.51.100.7/32" in nft_state
