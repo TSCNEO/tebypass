@@ -3,6 +3,7 @@
 import hmac
 import time
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -13,6 +14,35 @@ from starlette.responses import Response
 from app.core.auth import COOKIE, SESSION_SECONDS, admin_token, session_valid, sign
 
 router = APIRouter(tags=["Authentication"])
+
+
+def same_origin(origin: str, request: Request) -> bool:
+    """Compare browser origin to the effective URL set by the trusted proxy layer."""
+    try:
+        parsed = urlsplit(origin)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.path not in {"", "/"}
+            or parsed.query
+            or parsed.fragment
+        ):
+            return False
+        effective = request.url
+        defaults = {"http": 80, "https": 443}
+        return (
+            parsed.scheme,
+            parsed.hostname,
+            parsed.port if parsed.port is not None else defaults[parsed.scheme],
+        ) == (
+            effective.scheme,
+            effective.hostname,
+            effective.port if effective.port is not None else defaults.get(effective.scheme),
+        )
+    except ValueError:
+        return False
 
 
 class AdminMiddleware(BaseHTTPMiddleware):
@@ -32,7 +62,7 @@ class AdminMiddleware(BaseHTTPMiddleware):
             return JSONResponse({"detail": "Authentication required"}, status_code=401)
         if not token_ok and request.method not in {"GET", "HEAD", "OPTIONS"}:
             origin = request.headers.get("origin")
-            if origin and origin.rstrip("/") != str(request.base_url).rstrip("/"):
+            if origin and not same_origin(origin, request):
                 return JSONResponse({"detail": "Cross-origin request rejected"}, status_code=403)
         response = await call_next(request)
         response.headers["Cache-Control"] = "no-store"

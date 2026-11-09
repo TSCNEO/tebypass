@@ -16,6 +16,8 @@ services:
       - TEBYPASS_PORT=9384
       - TEBYPASS_DATABASE_URL=${TEBYPASS_DATABASE_URL:-sqlite+aiosqlite:////data/tebypass.db}
       - TEBYPASS_GATEWAY_SOCKET=/data/gateway.sock
+      # Trust only the IP(s)/CIDR of the reverse proxy, configured on the deployment host.
+      - FORWARDED_ALLOW_IPS=${TEBYPASS_TRUSTED_PROXIES:-127.0.0.1}
     volumes:
       - tebypass-data:/data
 

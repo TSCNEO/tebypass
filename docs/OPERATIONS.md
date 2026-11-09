@@ -163,3 +163,26 @@ Comprueba tráfico que entra y sale por la misma interfaz, vuelta por NAT, DNS y
 directos y a través de un peer WireGuard con claves efímeras. Verifica transferencias de
 256 KiB en ambos sentidos, caída del túnel, fail-closed y recuperación al retirar el destino. Se eliminan los
 contenedores y la red de prueba; no modifica la LAN ni usa volúmenes del despliegue.
+
+## Traefik y otros proxies HTTPS
+
+Configura en el `.env` del host las direcciones de **conexión del proxy a la aplicación**:
+
+```dotenv
+# Dirección de documentación; sustituye por la del proxy de tu despliegue.
+TEBYPASS_TRUSTED_PROXIES=192.0.2.10
+```
+
+Compose la pasa a Uvicorn como `FORWARDED_ALLOW_IPS`. Admite una lista separada por comas
+con IPs o CIDRs. Reinicia/recrea la aplicación después de cambiarla. Con Docker y NAT,
+la conexión puede llegar desde el gateway del bridge del servicio en lugar de la IP del
+contenedor Traefik; verifica la dirección realmente observada en el backend.
+
+Traefik debe conservar `Host` y establecer `X-Forwarded-Proto: https`. Solo los proxies
+incluidos en esa lista pueden determinar el esquema externo. Así el origen HTTPS del
+navegador coincide con la URL efectiva y las sesiones nuevas llevan cookie Secure.
+No configures confianza global `*` con el puerto interno accesible a otros clientes.
+
+La comprobación CSRF compara esquema, host y puerto efectivo; normaliza los puertos
+predeterminados y sigue rechazando orígenes distintos. No interpreta `X-Forwarded-Host`
+arbitrario como una autorización. Véase [FastAPI detrás de un proxy](https://fastapi.tiangolo.com/advanced/behind-a-proxy/).

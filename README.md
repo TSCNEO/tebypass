@@ -59,7 +59,9 @@ Configura el driver desde Ajustes y pulsa Probar conexión. El feed inicial est�
 actívalo cuando hayas elegido la salida. Crear una VPN, obtener credenciales del proveedor
 VPN y preparar las políticas base del router corresponde al administrador.
 
-Solo puerto y ubicación de BD son bootstrap. Credenciales, fuentes, intervalos, horarios
+Puerto y ubicación de BD son bootstrap. Detrás de Traefik configura también
+`TEBYPASS_TRUSTED_PROXIES` en el host para reconocer el HTTPS externo
+([guía](docs/OPERATIONS.md#traefik-y-otros-proxies-https)). Credenciales, fuentes, intervalos, horarios
 y comportamiento se guardan desde la web. Las opciones de macvlan son parámetros Docker.
 La dirección de escucha interna del contenedor permanece en 9384 aunque personalices el
 puerto publicado con `TEBYPASS_PORT` en `.env`.

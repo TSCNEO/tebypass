@@ -287,3 +287,16 @@ emulación de drivers operativos o sidecar remoto quedan sustituidas por este al
   dependencias/hash fijados; versión del build en lugar de `.git` montado.
 - Documentación vigente distingue implementación, pruebas sintéticas, pruebas de kernel
   y evidencia en hardware; ningún soporte nuevo se anuncia como certificado universalmente.
+
+
+## ADR-014: Origen externo y confianza explícita del reverse proxy
+
+**Aceptado.** El esquema HTTP del salto interno no representa necesariamente el origen
+HTTPS del navegador. La confianza en cabeceras reenviadas se configura en el límite de
+Uvicorn (`FORWARDED_ALLOW_IPS`), mediante `TEBYPASS_TRUSTED_PROXIES` de Compose, con
+loopback como valor inicial. Es configuración bootstrap de despliegue, independiente de
+los ajustes de routing de SQLite. No se habilita confianza indiscriminada en cabeceras.
+
+La protección CSRF usa el origen efectivo y puertos predeterminados normalizados, sin
+comparar rutas del proxy. Un origen ajeno y una cabecera de esquema enviada desde una
+conexión no confiable siguen rechazándose. HTTPS reconocido produce cookie Secure en login.

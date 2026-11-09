@@ -106,4 +106,7 @@ async def dashboard_view(request: Request) -> Any:
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("app.main:app", host=settings.host, port=settings.port, reload=False)
+    # Uvicorn accepts forwarded headers only from FORWARDED_ALLOW_IPS (loopback by default).
+    uvicorn.run(
+        "app.main:app", host=settings.host, port=settings.port, reload=False, proxy_headers=True
+    )
