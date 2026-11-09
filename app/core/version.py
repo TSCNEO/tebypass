@@ -108,7 +108,10 @@ def get_version_info() -> dict[str, Any]:
     env_commit = os.environ.get("TEBYPASS_GIT_COMMIT")
 
     git_info = _get_git_info()
-    commit = env_commit or git_info.get("commit", "unknown")
+    if env_commit and env_commit.strip().lower() not in {"", "unknown"}:
+        commit = env_commit.strip()
+    else:
+        commit = git_info.get("commit", "unknown")
     tag = git_info.get("tag", "")
     commit_count = git_info.get("commit_count", "0")
 
