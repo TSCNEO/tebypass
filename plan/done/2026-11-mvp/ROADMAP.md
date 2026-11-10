@@ -1,3 +1,7 @@
+> ARCHIVADO / CERRADO — ciclo MVP 0.2.1 (2026-11-10). Solo histórico: no describe
+> necesariamente el estado actual ni debe usarse para desplegar, configurar o implementar.
+> Consultar únicamente por petición explícita de investigación histórica.
+
 # Roadmap — estado del MVP 0.2
 
 La lista original de tareas marcaba capacidades incompletas como terminadas. Este documento
@@ -23,7 +27,7 @@ operativa están registradas en PHASES.md.
 
 - Matriz de laboratorio por modelo/firmware para Omada, OPNsense y MikroTik.
 - Formatos UniFi legacy y listas vinculadas adicionales de stopliga.
-- [Continuidad y pools VPN](VPN_POOL_PLAN.md): principal/reserva, sondas por salida y
+- [Continuidad y pools VPN](../../VPN_POOL_PLAN.md): principal/reserva, sondas por salida y
   fases posteriores de selección por servicio y reparto. Propuesta sin implementar.
 - Múltiples políticas por instalación y roles de administración.
 - Sidecar remoto autenticado e IPv6 de extremo a extremo.

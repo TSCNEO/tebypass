@@ -6,6 +6,9 @@ on:
     tags: ['v*']
     paths-ignore:
       - 'docs/**'
+      - 'plan/**'
+      - 'maintenance/**'
+      - 'CONTRIBUTING.md'
       - 'README.md'
       - 'AGENTS.md'
   workflow_dispatch:

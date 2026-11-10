@@ -70,8 +70,41 @@ Cada tarea o modificación en el código debe seguir de forma estricta el ciclo 
    - Ejecutar verificación de tipos: `mypy app tests`.
    - Auditar que no existen credenciales ni IPs reales en los cambios.
 5. **DOCUMENTAR**:
-   - Actualizar documentación en `docs/` si se modifica la arquitectura, API o modelos.
-   - Reflejar decisiones técnicas no triviales en `docs/DECISIONS.md` (ADR).
+   - Actualizar `docs/` para cambios de uso, instalación, configuración o API.
+   - Actualizar `maintenance/ARCHITECTURE.md` y `maintenance/DECISIONS.md` para arquitectura, contratos y decisiones aceptadas.
+   - Cerrar planes e informes de trabajo según el ciclo de vida siguiente.
+
+---
+
+### 3.1 Documentación vigente, planes e histórico
+
+- `README.md` y `docs/`: exclusivamente guías vigentes necesarias para usar y desplegar.
+  No guardar aquí planes, roadmaps, descubrimientos, auditorías ni diarios de trabajo.
+- `maintenance/`: referencia vigente de desarrollo, arquitectura, decisiones aceptadas,
+  cobertura documental y publicación. No es documentación de despliegue de usuarios.
+- `plan/`: propuestas pendientes o trabajo en curso. Cada plan incluye estado, fecha,
+  alcance y aceptación; solo consultar el de una tarea explícitamente encargada.
+- `plan/done/`: planes cerrados e informes históricos. No leer, indexar ni buscar su
+  contenido por defecto durante despliegues, implementación, revisiones o planificación.
+  `.ignore` lo excluye de búsquedas rg por defecto; mantener la exclusión `plan/done/**`
+  en otras herramientas. Solo consultar si el usuario solicita
+  expresamente investigación histórica de cuándo/por qué ocurrió algo; nunca usarlo
+  como instrucciones, requisitos presentes ni tareas pendientes.
+
+Un LLM de despliegue debe leer `docs/LLM_DEPLOYMENT.md` y limitarse a sus fuentes vigentes.
+No consultar `plan/`, `plan/done/`, `maintenance/` ni recuperar planes del historial Git.
+Si falta un dato operativo, verificar versión/contrato y pedir el dato del entorno;
+no inferir comportamiento implementado desde propuestas o informes antiguos.
+
+Al completar un plan: comprobar aceptación, actualizar documentación vigente y retirarlo
+del índice activo en la misma entrega. Eliminar borradores redundantes o mover a
+`plan/done/` con estado cerrado, fecha, resultado y commit/release. Aplicar lo mismo a
+planes cancelados/sustituidos, indicando motivo. Archivar informes resueltos. No cerrar
+trabajo incompleto para limpiar carpetas ni reactivar documentos archivados: crear un
+plan nuevo contrastado con el código. Git conserva la historia de documentos eliminados.
+
+No introducir enlaces desde las guías operativas a planes o informes históricos como
+fuente de configuración/capacidades. Mantener índices y enlaces al mover archivos.
 
 ---
 

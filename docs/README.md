@@ -1,36 +1,15 @@
-# Documentación de TeByPass
+# Documentación de uso
 
-## Desplegar y operar
+Guías vigentes para instalar, configurar y operar TeByPass:
 
-- [Instalación](INSTALLATION.md): elección de componentes y primera prueba.
-- [Uso del panel](USER_GUIDE.md): destinos, listas, importación, fuentes, pausas y diagnóstico.
-- [Configuración](CONFIGURATION.md): todos los ajustes, defaults, API exclusiva y Docker.
+- [Instalación](INSTALLATION.md): elegir componentes y realizar la primera prueba.
+- [Despliegue con un LLM](LLM_DEPLOYMENT.md): entrevista y comprobaciones por etapas.
+- [Uso del panel](USER_GUIDE.md): destinos, listas, importación, fuentes y pausas.
+- [Configuración](CONFIGURATION.md): campos, valores iniciales y límites.
 - [API](API.md): autenticación, operaciones, ejemplos y errores.
-- [Guía para LLM](LLM_DEPLOYMENT.md): entrevista y despliegue por etapas.
-- [Operación](OPERATIONS.md): requisitos de router, gateway, diagnóstico, copias y proxy.
+- [Operación](OPERATIONS.md): routers, gateway, diagnóstico, copias, actualización y proxy.
+- [Alcance y limitaciones](SCOPE.md): capacidades disponibles y condiciones de validación.
+- [Notas de versión](RELEASE_NOTES.md): cambios y requisitos de actualización de la entrega.
 
-## Contribuir y mantener
-
-- [Desarrollo](../CONTRIBUTING.md) y [normas de agentes](../AGENTS.md).
-- [Arquitectura actual](ARCHITECTURE.md) y [decisiones](DECISIONS.md).
-- [Alcance](PROJECT.md), [roadmap](ROADMAP.md) y [publicación](RELEASING.md).
-- [Notas de versión](RELEASE_NOTES.md).
-
-## Propuestas
-
-- [Continuidad y pools VPN](VPN_POOL_PLAN.md): plan de failover, sondas por salida,
-  selección por servicio y reparto posterior. Propuesta sin implementar.
-
-## Estado funcional
-
-[Auditoría posterior 0.2.1](POST-FIX-AUDIT-0.2.1.md): cierre de las regresiones,
-pruebas de red y límites de validación. La [auditoría inicial](FUNCTIONAL-AUDIT-2026-11-10.md)
-conserva las reproducciones de la base anterior. La cobertura documental no sustituye
-la comprobación funcional.
-
-## Evidencias históricas
-
-[PHASES](PHASES.md) y la [auditoría inicial](AUDIT-2026-11-09.md) documentan revisiones
-concretas; no son instrucciones de instalación ni un dictamen sobre el HEAD actual.
-La [revisión de documentación pública](PUBLIC-DOCS-AUDIT.md) delimita la reorganización
-inicial. La [auditoría de opciones](OPTIONS-AUDIT.md) recoge el inventario y su cobertura.
+Este directorio no contiene planes de desarrollo, informes de trabajo ni históricos.
+Para desplegar, seguir exclusivamente estas guías y comprobar la versión instalada.

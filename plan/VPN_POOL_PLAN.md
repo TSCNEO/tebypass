@@ -1,6 +1,6 @@
 # Plan: continuidad mediante varias salidas VPN
 
-Estado: propuesta, sin implementar. Base: TeByPass 0.2.1.
+Estado: pendiente / propuesta, sin implementar. Fecha: 2026-11-10. Base: TeByPass 0.2.1.
 Prioridad elegida: cambiar automáticamente cuando falla la VPN principal.
 
 ## 1. Entrega propuesta

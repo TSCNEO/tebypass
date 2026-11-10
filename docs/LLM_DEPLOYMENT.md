@@ -1,5 +1,18 @@
 # Protocolo de despliegue asistido por LLM
 
+## Fuentes permitidas para desplegar
+
+Usar README.md y exclusivamente las guías vigentes de docs/: INSTALLATION, USER_GUIDE,
+CONFIGURATION, API, OPERATIONS y SCOPE; RELEASE_NOTES para actualizar una versión.
+Comprobar siempre la versión instalada y su contrato autenticado si hay diferencias.
+
+No leer, buscar ni utilizar plan/ (incluido plan/done), maintenance/ ni informes o planes
+recuperados del historial Git para desplegar. Tampoco seguir enlaces desde un plan hacia
+un documento antiguo como si fuera vigente. Esos archivos no son requisitos ni prueban
+que una función esté implementada. Si falta información operativa, inspeccionar la
+versión y preguntar por el dato del entorno: no completar con diseños o auditorías pasados.
+Una solicitud explícita de historia se trata por separado y no altera el despliegue.
+
 ## Objetivo y reglas
 
 Guiar a una persona sin conocimiento previo del proyecto hasta una instalación mínima

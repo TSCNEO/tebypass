@@ -1,3 +1,7 @@
+> ARCHIVADO / CERRADO — ciclo MVP 0.2.1 (2026-11-10). Solo histórico: no describe
+> necesariamente el estado actual ni debe usarse para desplegar, configurar o implementar.
+> Consultar únicamente por petición explícita de investigación histórica.
+
 # Revisión de documentación pública
 
 Fecha: 2026-11-09. Alcance: documentación de incorporación y despliegue, contrastada

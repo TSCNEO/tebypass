@@ -36,7 +36,7 @@ master retira todas las contribuciones. La opción forzada ignora la señal comu
 pero mantiene validación de frescura y selección de entradas recientes activas.
 
 El driver recibe la unión de CIDRs normalizados/colapsados: una carpeta no es una
-política distinta. IPv6 se rechaza al seleccionar gateway/MikroTik. La instancia de
+política distinta. IPv6 se rechaza al seleccionar gateway/MikroTik/Omada. La instancia de
 router queda fija durante un ciclo. Cambios de identidad de salida retiran primero la
 política anterior; si falla la retirada, el cambio se rechaza. No existe una transacción
 distribuida entre router y SQLite: un fallo posterior de persistencia exige reconciliar.
@@ -47,7 +47,7 @@ SQLite WAL + synchronous NORMAL + foreign_keys ON. Tablas: ajustes cifrados, fee
 carpetas, destinos, resoluciones, eventos y estado interno de notificaciones. Las
 migraciones aditivas incorporan columnas de estado a feeds existentes. La retención DNS
 se restaura de `resolved_ips`; se purgan expirados durante reconciliación. El resolver
-nativo usa un TTL sintético de 60 segundos más la ventana configurada, no el TTL autoritativo.
+nativo usa max(60 segundos de TTL sintético, ventana configurada), no el TTL autoritativo.
 
 Feed guarda señal, fecha de origen, última consulta, ETag y último error; los targets
 persisten el snapshot validado. Un estado desconocido conserva el último válido y degrada

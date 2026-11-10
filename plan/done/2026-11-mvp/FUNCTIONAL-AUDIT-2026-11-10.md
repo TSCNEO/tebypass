@@ -1,3 +1,7 @@
+> ARCHIVADO / CERRADO — ciclo MVP 0.2.1 (2026-11-10). Solo histórico: no describe
+> necesariamente el estado actual ni debe usarse para desplegar, configurar o implementar.
+> Consultar únicamente por petición explícita de investigación histórica.
+
 # Auditoría de comportamiento funcional
 
 > Informe de la base indicada. Los seis hallazgos se corrigen en 0.2.1; consultar

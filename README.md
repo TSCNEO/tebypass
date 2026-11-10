@@ -170,8 +170,7 @@ Con drivers de router compatibles no hace falta este cambio en los clientes.
 
 ## Alcance
 
-La [auditoría posterior a las correcciones](docs/POST-FIX-AUDIT-0.2.1.md) recoge las
-regresiones corregidas, las pruebas de red y los límites de validación de la versión 0.2.1.
+Consulta el [alcance y las limitaciones vigentes](docs/SCOPE.md).
 
 - Una política de salida y un driver por instalación; las carpetas organizan destinos.
 - UniFi usa Traffic Routes V2. Omada y OPNsense usan adaptadores de stopliga.
@@ -187,7 +186,7 @@ regresiones corregidas, las pruebas de red y los límites de validación de la v
 - [Referencia de todas las opciones](docs/CONFIGURATION.md) y [API](docs/API.md)
 - [Operación, diagnóstico, copias y actualización](docs/OPERATIONS.md)
 - [Desarrollo y comprobaciones](CONTRIBUTING.md)
-- [Índice técnico e histórico](docs/README.md)
+- [Índice de guías de uso](docs/README.md)
 
 ## Licencia y créditos
 

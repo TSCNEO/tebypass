@@ -27,7 +27,7 @@ no necesariamente los de una instalación existente.
 | `router_driver` | `mock` | `mock`, `unifi`, `omada`, `opnsense`, `mikrotik`, `virtual_gateway`; elegir según INSTALLATION. |
 | `routing_enabled` | `true` | Interruptor global; false retira lo gestionado. Verificar resultado remoto; conserva configuración y destinos. |
 | `sync_interval_seconds` | `300` | Segundos entre ciclos; entero ≥ 0. 0 desactiva ciclos automáticos, pero cambios y peticiones manuales siguen reconciliando. |
-| `sliding_window_seconds` | `3600` | Retención adicional de IPs DNS. API acepta ≥ 0; panel propone mínimo 60. Se suma al TTL sintético de 60 s, no al TTL autoritativo. |
+| `sliding_window_seconds` | `3600` | Retención adicional de IPs DNS. API acepta ≥ 0; panel propone mínimo 60. Se usa max(ventana, TTL sintético de 60 s), no el TTL autoritativo. |
 | `resolve_ipv6` | `false` | Resolver también AAAA. Gateway, MikroTik y Omada solo admiten IPv4: los ajustes y destinos explícitos incompatibles se rechazan. IPv4 seleccionado no cubre conexiones IPv6 del cliente. |
 | `feed_isp_filter` | vacío | Filtro de operador de la fuente comunitaria; vacío incluye todos. No modifica su señal global ni afecta destinos manuales. |
 | `feed_force_active` | `false` | Ignora señal global comunitaria y utiliza incidencias recientes; mantiene controles de frescura y horario. No activa un feed pausado. |

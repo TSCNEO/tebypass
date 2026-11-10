@@ -1,6 +1,6 @@
 # Desarrollo
 
-Leer [AGENTS.md](AGENTS.md) y los [contratos de arquitectura](docs/ARCHITECTURE.md).
+Leer [AGENTS.md](AGENTS.md) y los [contratos de arquitectura](maintenance/ARCHITECTURE.md).
 Mantener core, drivers, API y gateway separados. Los drivers no acceden a BD ni HTTP
 entrante. Usar únicamente direcciones y dominios de documentación en ejemplos y tests.
 Nunca adjuntar datos de instalaciones reales a commits, logs de incidencias o fixtures.
@@ -34,6 +34,11 @@ requiere Docker y capacidades de red en un entorno aislado.
 
 Cambios mayores en rama descriptiva, commits Conventional Commits y comprobaciones
 completas antes de integrar. Al cambiar opciones, endpoints o acciones del panel,
-seguir el [procedimiento de cobertura documental](docs/OPTIONS-AUDIT.md#mantener-la-cobertura). Documentar cambios de API/modelos/arquitectura y decisiones
-no triviales. [Publicación](docs/RELEASING.md) es un procedimiento del mantenedor,
+seguir el [procedimiento de cobertura documental](maintenance/DOCUMENTATION.md). Documentar cambios de API/modelos/arquitectura y decisiones
+no triviales. [Publicación](maintenance/RELEASING.md) es un procedimiento del mantenedor,
 separado de la instalación de usuarios.
+
+Los planes pendientes están en plan/. Consultar solo el plan de la tarea encargada.
+Al completarlo, actualizar guías y retirarlo de pendientes: eliminarlo o archivarlo en
+plan/done con fecha, resultado y commit/release. No consultar históricos para trabajo
+actual; solo por una solicitud explícita de investigación histórica.
