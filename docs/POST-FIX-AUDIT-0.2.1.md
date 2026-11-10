@@ -29,7 +29,10 @@ instalar la ruta; exige restauración del túnel anterior y ruta efectiva en ker
 El pipeline de publicación ejecuta ese script, además de reenvío DNS/HTTP desde cliente,
 transferencias, caída del túnel y recuperación, antes de promover imágenes.
 
-Las evidencias de ejecución de CI y publicación se registran antes de anunciar la release.
+La etapa checks de [CI del código corregido](https://github.com/TSCNEO/tebypass/actions/runs/42797085007)
+ha pasado: dependencias fijadas, 145 pruebas y ambos scripts de red Linux. Las imágenes
+app/gateway se han construido para amd64/arm64. La instalación descargada y promoción
+se verifican en las siguientes etapas del mismo flujo antes de publicar la release.
 La disponibilidad local de Docker no sustituye esos resultados; los mocks no acreditan
 reenvío real. La validación de hardware de routers y de cada LAN permanece fuera de esta
 prueba automatizada. Arm64 se compila; las pruebas de ejecución del pipeline son amd64.

@@ -18,9 +18,10 @@
 
 ## Estado funcional
 
-[Auditoría funcional](FUNCTIONAL-AUDIT-2026-11-10.md): fallos reproducidos, pruebas de
-aceptación y validaciones de tráfico pendientes. La cobertura documental no acredita
-que todas las opciones funcionen correctamente.
+[Auditoría posterior 0.2.1](POST-FIX-AUDIT-0.2.1.md): cierre de las regresiones,
+pruebas de red y límites de validación. La [auditoría inicial](FUNCTIONAL-AUDIT-2026-11-10.md)
+conserva las reproducciones de la base anterior. La cobertura documental no sustituye
+la comprobación funcional.
 
 ## Evidencias históricas
 

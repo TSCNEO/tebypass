@@ -1,10 +1,10 @@
 # Publicación de imágenes y primera release
 
-El MVP es candidato a una primera release **0.2.0**, con alcance y límites indicados en
-README/PROJECT. No se anuncia certificación de todos los routers ni compatibilidad IPv6
+La entrega **0.2.1** corrige los seis casos de aceptación de la auditoría funcional,
+con alcance y límites indicados en README/PROJECT. No se anuncia certificación de todos los routers ni compatibilidad IPv6
 del gateway. Este procedimiento no convierte automáticamente un repositorio privado en público.
 
-## Estado de publicación comprobado (2026-11-09)
+## Antecedente de publicación (2026-11-09)
 
 Candidata `v0.2.0-rc.3` preparada en borrador pre-release. Main y candidata pasaron el
 flujo completo, incluidas imágenes descargadas de GHCR, persistencia, pruebas de kernel
@@ -12,6 +12,9 @@ y checksums de assets descargados. Evidencia en [PHASES.md](PHASES.md#distribuci
 El repositorio ya es público. La candidata continúa en borrador y no hay release pública.
 Antes de anunciar instalación por release, comprobar visibilidad y pull anónimo de ambos
 paquetes y publicar la entrega elegida. No presuponer disponibilidad de `latest`.
+
+El estado de verificación de 0.2.1 se registra en la
+[auditoría posterior](POST-FIX-AUDIT-0.2.1.md).
 
 ## Qué hace GitHub
 

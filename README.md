@@ -43,16 +43,24 @@ comandos en el servidor, podrá realizar el despliegue; si no, te guiará paso a
    [requisitos](docs/INSTALLATION.md#requisitos-por-driver). Para un router compatible,
    prepara su VPN/salida y el acceso API. Para gateway virtual, completa primero la
    [preparación LAN](docs/OPERATIONS.md#gateway-virtual-despliegue-en-la-lan).
-2. **Prepara el servidor:** instala Docker Engine, Docker Compose v2 y Git para compilar.
-   Los comandos siguientes arrancan solo la aplicación; la
-   [guía de instalación](docs/INSTALLATION.md) incluye el arranque específico del gateway
-   y la alternativa con imágenes de release cuando estén publicadas.
-3. **Descarga y arranca** desde el código:
+2. **Prepara el servidor:** instala Docker Engine y Docker Compose v2. Los comandos
+   siguientes arrancan solo la aplicación; la [guía de instalación](docs/INSTALLATION.md)
+   incluye el arranque específico del gateway y la alternativa de compilar desde Git.
+3. **Descarga y arranca** la versión [0.2.1](https://github.com/TSCNEO/tebypass/releases/tag/v0.2.1).
+   Descarga también `SHA256SUMS` y verifica el Compose antes de ejecutarlo:
 
 ```sh
-git clone https://github.com/TSCNEO/tebypass.git
+mkdir tebypass
 cd tebypass
-TEBYPASS_GIT_COMMIT=$(git rev-parse HEAD) docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build --wait tebypass
+curl -fLO https://github.com/TSCNEO/tebypass/releases/download/v0.2.1/docker-compose.yml
+curl -fLO https://github.com/TSCNEO/tebypass/releases/download/v0.2.1/SHA256SUMS
+```
+
+Compara `sha256sum docker-compose.yml` con su línea en `SHA256SUMS` (en macOS,
+`shasum -a 256 docker-compose.yml`). Después:
+
+```sh
+docker compose up -d --wait tebypass
 ```
 
 4. **Accede:** abre `http://<servidor>:9384`, consulta la clave localmente con el comando
@@ -162,8 +170,8 @@ Con drivers de router compatibles no hace falta este cambio en los clientes.
 
 ## Alcance
 
-La [auditoría funcional](docs/FUNCTIONAL-AUDIT-2026-11-10.md) identifica seis casos
-de aceptación pendientes y distingue pruebas aisladas de validación con tráfico real.
+La [auditoría posterior a las correcciones](docs/POST-FIX-AUDIT-0.2.1.md) recoge las
+regresiones corregidas, las pruebas de red y los límites de validación de la versión 0.2.1.
 
 - Una política de salida y un driver por instalación; las carpetas organizan destinos.
 - UniFi usa Traffic Routes V2. Omada y OPNsense usan adaptadores de stopliga.
