@@ -58,9 +58,19 @@ Linux, promoción de imágenes y generación/verificación de assets del borrado
 Descarga independiente de los seis assets: cinco ficheros cotejados con SHA256SUMS,
 todos correctos.
 
-Bloqueo de distribución pública comprobado al preparar la entrega: ambas autorizaciones
-anónimas GHCR devuelven HTTP 401. La sesión CLI disponible no tiene scope read:packages,
-y no se dispone de sesión de navegador utilizable para cambiar visibilidad. Hace falta
-establecer Public en ambos paquetes, verificar acceso anónimo a manifiestos/blobs de
-0.2.1 y publicar el borrador. No confundir una instalación autenticada de CI con una
-instalación pública sin credenciales. Este requisito no está acreditado por el pipeline.
+Publicación completada el 2026-11-10: [release estable 0.2.1](https://github.com/TSCNEO/tebypass/releases/tag/v0.2.1),
+marcada como última release, sin borrador ni pre-release. El bloqueo inicial de GHCR
+quedó resuelto al hacer públicos ambos paquetes.
+
+Verificación independiente sin credenciales:
+
+- Manifiestos y blobs de configuración de ambas imágenes para linux/amd64 y linux/arm64,
+  con revisión y versión coincidentes con el tag.
+- Descarga completa y SHA256 de todas las capas amd64: aplicación, 73 549 931 bytes;
+  gateway, 25 036 887 bytes. Sin usar credenciales de Docker ni GitHub.
+- Descarga pública de los seis assets de la release; los cinco ficheros de SHA256SUMS
+  coinciden. Compose fija ambas imágenes a 0.2.1. La API pública latest apunta a v0.2.1.
+
+La instalación y las pruebas de red en CI, junto con la descarga anónima independiente,
+acreditan la distribución pública de esta versión. Los límites de hardware y de tráfico
+real de cada instalación siguen siendo los indicados arriba.

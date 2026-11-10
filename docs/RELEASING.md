@@ -4,14 +4,20 @@ La entrega **0.2.1** corrige los seis casos de aceptación de la auditoría func
 con alcance y límites indicados en README/PROJECT. No se anuncia certificación de todos los routers ni compatibilidad IPv6
 del gateway. Este procedimiento no convierte automáticamente un repositorio privado en público.
 
+## Estado actual (2026-11-10)
+
+[0.2.1 está publicada](https://github.com/TSCNEO/tebypass/releases/tag/v0.2.1) como release
+estable y latest. Ambos paquetes GHCR son públicos; descarga anónima de imágenes y assets
+verificada. Evidencias y alcance en la [auditoría posterior](POST-FIX-AUDIT-0.2.1.md).
+
 ## Antecedente de publicación (2026-11-09)
 
 Candidata `v0.2.0-rc.3` preparada en borrador pre-release. Main y candidata pasaron el
 flujo completo, incluidas imágenes descargadas de GHCR, persistencia, pruebas de kernel
 y checksums de assets descargados. Evidencia en [PHASES.md](PHASES.md#distribución-de-imágenes-y-candidata-de-primera-release).
-El repositorio ya es público. La candidata continúa en borrador y no hay release pública.
-Antes de anunciar instalación por release, comprobar visibilidad y pull anónimo de ambos
-paquetes y publicar la entrega elegida. No presuponer disponibilidad de `latest`.
+En esa fecha el repositorio ya era público, pero la candidata seguía en borrador y no
+había release pública. La publicación 0.2.1 posterior completó la comprobación de
+visibilidad y descarga anónima; no confundir este antecedente con el estado actual.
 
 El estado de verificación de 0.2.1 se registra en la
 [auditoría posterior](POST-FIX-AUDIT-0.2.1.md).
