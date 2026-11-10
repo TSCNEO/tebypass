@@ -74,6 +74,43 @@ docker compose exec tebypass cat /data/admin_token
 Para las siguientes operaciones de una instalación compilada se deben conservar ambos
 archivos Compose. Consulta [actualización y copias](docs/OPERATIONS.md).
 
+## Cómo funciona con un router compatible
+
+TeByPass se conecta a la API del router/controlador y mantiene los destinos de la
+política de salida. **El router transporta el tráfico y aloja la VPN; el contenedor
+TeByPass solo administra la política.** El servidor del panel necesita acceso a esa
+API, pero no tiene que estar en el recorrido de los paquetes.
+
+Los dispositivos conservan su puerta de enlace y DNS habituales. Cuando acceden a un
+destino seleccionado, el router lo envía por la VPN/salida configurada; el resto sigue
+su recorrido habitual. No hace falta instalar nada en la TV/PC, subir WireGuard al
+panel ni arrancar `tebypass-gateway`. El alcance sobre clientes depende de la política
+del driver y del router: no es una selección individual de dispositivos desde TeByPass.
+
+### Ejemplo con UniFi
+
+Supongamos un gateway UniFi con Traffic Routes V2, un cliente VPN ya operativo llamado
+`VPN-Salida` y una TV que utiliza ese gateway como router habitual:
+
+1. Arranca solo `tebypass` con los pasos de instalación manual anteriores.
+2. En **Ajustes**, selecciona **UniFi**, introduce la dirección del controlador, sitio
+   y API key local, selecciona `VPN-Salida` y pulsa **Probar conexión**.
+3. Añade un destino manual habilitado y sincroniza. Por ejemplo, `198.51.100.80/32`
+   ilustra la sintaxis de una IP concreta; es un rango reservado de documentación y
+   debe sustituirse por un destino real bajo tu control para probar conectividad.
+4. Comprueba en UniFi que la Traffic Route gestionada contiene el destino y apunta
+   al cliente VPN elegido. Abre una conexión nueva hacia ese destino desde la TV/PC
+   y verifica la salida mediante registros/contadores del router o del servidor de prueba.
+5. Comprueba otro destino no seleccionado: debe conservar la salida habitual.
+   Prueba la pausa global y verifica que se desactiva la política gestionada.
+
+La TV sigue usando el router UniFi como puerta de enlace durante toda la prueba.
+La política UniFi actual abarca todos los clientes alcanzados por esa regla, no solo
+la TV. Si se usa Omada, OPNsense o MikroTik, el recorrido es equivalente, pero cambian
+los [preparativos y campos del driver](docs/OPERATIONS.md#preparación-por-router).
+La respuesta ante caída de la VPN depende del router y de su política; el fail-closed
+del gateway virtual no configura automáticamente esa protección en otros drivers.
+
 ## Ejemplo: una TV o PC con gateway virtual
 
 Después de [preparar y arrancar el gateway](docs/INSTALLATION.md#5-solo-si-se-ha-elegido-gateway-virtual),
