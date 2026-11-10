@@ -118,6 +118,28 @@ selecciona `virtual_gateway` en Ajustes, sube WireGuard y comprueba su estado.
 **En cada dispositivo que vaya a utilizarlo, cambia la puerta de enlace por la IP LAN
 del gateway virtual**, que puede ser distinta de la IP del servidor del panel.
 
+### Cargar la configuración WireGuard
+
+1. Obtén de tu proveedor VPN o administrador un archivo de cliente WireGuard (`.conf`).
+   TeByPass no genera la suscripción ni las credenciales de la VPN.
+2. Con el sidecar arrancado, selecciona **Gateway virtual propio** en **Ajustes** y pulsa
+   **Guardar ajustes** antes de cargar el archivo.
+3. En **Ajustes → WireGuard → Subir o pegar tu wg0.conf**, selecciona el archivo
+   (también puedes pegar su contenido en el campo del panel).
+4. Pulsa **Guardar configuración**. Seleccionar el archivo por sí solo no lo sube.
+   Con el driver virtual seleccionado, el servicio guarda y solicita aplicar el túnel;
+   comprueba el aviso **Túnel aplicado** y la salud del driver.
+5. Si aparece un error 502, el archivo puede estar guardado pero el túnel no aplicado:
+   revisa el sidecar y vuelve a seleccionar/pegar y guardar el archivo. Después valida
+   el tráfico desde un cliente; **Configuración cargada** no prueba conectividad VPN.
+
+El archivo contiene claves privadas: introdúcelo solo en el panel de confianza, no en
+el chat, Git ni incidencias. **Borrar** elimina la configuración y, con el driver virtual
+seleccionado, solicita detener el túnel. Con UniFi, Omada, OPNsense o MikroTik, configura
+la VPN en el router; esta pestaña no carga archivos en esos equipos.
+
+### Configurar el dispositivo
+
 Ejemplo ficticio, solo de documentación; sustituye los valores por los de tu LAN:
 
 | Ajuste del dispositivo | Antes | Con gateway virtual |

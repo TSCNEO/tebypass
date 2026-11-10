@@ -115,7 +115,14 @@ Para un checkout compilado:
 TEBYPASS_GIT_COMMIT=$(git rev-parse HEAD) docker compose -f docker-compose.yml -f docker-compose.build.yml --profile gateway up -d --build --wait
 ```
 
-Seleccionar `virtual_gateway` y subir WireGuard desde el panel. Aplicación y sidecar
+Seleccionar `virtual_gateway` en Ajustes y pulsar **Guardar ajustes**. Después abrir
+**Ajustes → WireGuard**, seleccionar el archivo de cliente `.conf` del proveedor o pegar
+su contenido y pulsar **Guardar configuración**. Elegir un archivo no lo sube hasta
+pulsar ese botón. Comprobar **Túnel aplicado**; si devuelve 502, revisar el sidecar y
+volver a cargar/guardar para aplicar. El indicador **Configuración cargada** solo acredita
+que existe un archivo, no conectividad. No compartir sus claves en chat ni Git.
+
+Aplicación y sidecar
 deben compartir el volumen en el mismo host. Usar la IP LAN del sidecar como gateway
 del cliente de prueba y mantener un DNS accesible: el sidecar no es servidor DNS.
 Verificar tráfico seleccionado/no seleccionado y caída del túnel desde otro equipo LAN.
