@@ -52,10 +52,11 @@ async def db_ready(monkeypatch: pytest.MonkeyPatch) -> AsyncGenerator[None, None
 
     yield
 
+    # init_db reloads persisted values; clear them before restoring the snapshot.
+    await _reset_database()
     for key, value in snapshot.items():
         setattr(settings, key, value)
     invalidate_driver()
-    await _reset_database()
 
 
 @pytest.fixture

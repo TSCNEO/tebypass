@@ -16,6 +16,12 @@
 - [Alcance](PROJECT.md), [roadmap](ROADMAP.md) y [publicación](RELEASING.md).
 - [Notas de versión](RELEASE_NOTES.md).
 
+## Estado funcional
+
+[Auditoría funcional](FUNCTIONAL-AUDIT-2026-11-10.md): fallos reproducidos, pruebas de
+aceptación y validaciones de tráfico pendientes. La cobertura documental no acredita
+que todas las opciones funcionen correctamente.
+
 ## Evidencias históricas
 
 [PHASES](PHASES.md) y la [auditoría inicial](AUDIT-2026-11-09.md) documentan revisiones

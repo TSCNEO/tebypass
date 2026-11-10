@@ -162,10 +162,13 @@ Con drivers de router compatibles no hace falta este cambio en los clientes.
 
 ## Alcance
 
+La [auditoría funcional](docs/FUNCTIONAL-AUDIT-2026-11-10.md) identifica seis casos
+de aceptación pendientes y distingue pruebas aisladas de validación con tráfico real.
+
 - Una política de salida y un driver por instalación; las carpetas organizan destinos.
 - UniFi usa Traffic Routes V2. Omada y OPNsense usan adaptadores de stopliga.
   Las pruebas de contrato no equivalen a certificación en todos los equipos o firmwares.
-- Gateway virtual y MikroTik: IPv4. El sidecar comparte host y volumen con la aplicación.
+- Gateway virtual, MikroTik y backend Omada: IPv4. El sidecar comparte host y volumen con la aplicación.
 - TeByPass no suministra un proveedor VPN ni configura automáticamente el túnel del router.
 - El estado saludable de Docker no acredita conectividad de los clientes por la VPN.
 
