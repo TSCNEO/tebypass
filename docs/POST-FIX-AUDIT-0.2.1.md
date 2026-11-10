@@ -48,3 +48,19 @@ reintentar. La candidata guardada puede diferir de la última aplicada.
 
 Los seis hallazgos originales tienen regresiones que pasan; esto no equivale a certificar
 que no exista ningún defecto ni que todos los firmwares se comporten igual.
+
+## Evidencia final del tag y estado de publicación
+
+Tag `v0.2.1`, commit `9a78a7ee15c60bd13ef6029189878476d3505b90`.
+[Pipeline completo del tag](https://github.com/TSCNEO/tebypass/actions/runs/42797556985):
+correctos checks, publicación amd64/arm64, instalación descargada, repetición de scripts
+Linux, promoción de imágenes y generación/verificación de assets del borrador.
+Descarga independiente de los seis assets: cinco ficheros cotejados con SHA256SUMS,
+todos correctos.
+
+Bloqueo de distribución pública comprobado al preparar la entrega: ambas autorizaciones
+anónimas GHCR devuelven HTTP 401. La sesión CLI disponible no tiene scope read:packages,
+y no se dispone de sesión de navegador utilizable para cambiar visibilidad. Hace falta
+establecer Public en ambos paquetes, verificar acceso anónimo a manifiestos/blobs de
+0.2.1 y publicar el borrador. No confundir una instalación autenticada de CI con una
+instalación pública sin credenciales. Este requisito no está acreditado por el pipeline.

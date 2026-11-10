@@ -39,6 +39,11 @@ comandos en el servidor, podrá realizar el despliegue; si no, te guiará paso a
 
 ## Instalación manual rápida
 
+**Publicación pendiente:** 0.2.1 está verificada y preparada en borrador; falta habilitar
+la descarga pública de ambas imágenes GHCR. Hasta que esté publicada, utiliza la
+[compilación desde código](docs/INSTALLATION.md#compilar-el-código). Los pasos de descarga
+siguientes corresponden a la release publicada.
+
 1. **Elige el driver** con la tabla anterior y revisa sus
    [requisitos](docs/INSTALLATION.md#requisitos-por-driver). Para un router compatible,
    prepara su VPN/salida y el acceso API. Para gateway virtual, completa primero la
