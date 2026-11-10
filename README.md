@@ -172,6 +172,8 @@ Con drivers de router compatibles no hace falta este cambio en los clientes.
 ## Documentación
 
 - [Instalación y requisitos](docs/INSTALLATION.md)
+- [Uso del panel, destinos, listas y fuentes](docs/USER_GUIDE.md)
+- [Referencia de todas las opciones](docs/CONFIGURATION.md) y [API](docs/API.md)
 - [Operación, diagnóstico, copias y actualización](docs/OPERATIONS.md)
 - [Desarrollo y comprobaciones](CONTRIBUTING.md)
 - [Índice técnico e histórico](docs/README.md)

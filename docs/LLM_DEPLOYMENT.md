@@ -4,7 +4,13 @@
 
 Guiar a una persona sin conocimiento previo del proyecto hasta una instalación mínima
 comprobada. Leer primero README, INSTALLATION y la sección operativa del driver elegido.
-Los contratos actuales están en el código y en `/openapi.json` autenticado.
+Completar la entrevista con [USER_GUIDE](USER_GUIDE.md), [CONFIGURATION](CONFIGURATION.md)
+y [API](API.md). Los contratos actuales están en el código y en `/openapi.json` autenticado.
+Antes de dar por terminado, repasar opciones con el usuario: destinos manuales/importación,
+fuentes y filtro, intervalo/retención, IPv6 según driver, horario/zona, notificaciones,
+pausa/purga, acceso/copia/actualización. Mantener valores iniciales cuando sean apropiados;
+no habilitar funciones opcionales sin una necesidad. Explicar qué se configuró y qué queda
+con su valor predeterminado, sin abrumar con campos de otros drivers.
 
 No asumir fabricante, topología, servidor, VPN ni acceso administrativo. Preguntar por
 etapas, con pocas preguntas claras, esperar las respuestas que condicionan la siguiente

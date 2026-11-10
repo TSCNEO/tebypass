@@ -1,5 +1,8 @@
 # Operación del MVP
 
+Para acciones del panel consultar [Uso](USER_GUIDE.md); para cada campo y valor inicial,
+[Configuración](CONFIGURATION.md); para automatización, [API](API.md).
+
 ## Acceso y secretos
 
 Primera instalación: abre el panel e introduce la clave que genera el servicio:
@@ -65,7 +68,7 @@ y ponle una nota “TeByPass-Gateway”.** La MAC es determinista para mantener 
 docker compose --profile gateway up -d --wait
 ```
 
-5. Sube `wg0.conf` desde la web. El controlador valida, configura `Table=off`, elimina
+5. Guarda el driver virtual y sigue [la carga de WireGuard](../README.md#cargar-la-configuración-wireguard). El controlador valida, configura `Table=off`, elimina
    DNS del archivo aplicado y rechaza hooks. Guardar/aplicar y borrar/detener son operaciones
    distintas del mero estado “fichero presente”. Un 502 exige revisar y volver a aplicar.
 6. Prueba desde **otro equipo LAN**: ping a la IP elegida y Probar conexión. En macvlan el

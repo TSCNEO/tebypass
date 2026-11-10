@@ -3,6 +3,9 @@
 ## Desplegar y operar
 
 - [Instalación](INSTALLATION.md): elección de componentes y primera prueba.
+- [Uso del panel](USER_GUIDE.md): destinos, listas, importación, fuentes, pausas y diagnóstico.
+- [Configuración](CONFIGURATION.md): todos los ajustes, defaults, API exclusiva y Docker.
+- [API](API.md): autenticación, operaciones, ejemplos y errores.
 - [Guía para LLM](LLM_DEPLOYMENT.md): entrevista y despliegue por etapas.
 - [Operación](OPERATIONS.md): requisitos de router, gateway, diagnóstico, copias y proxy.
 
@@ -17,4 +20,5 @@
 
 [PHASES](PHASES.md) y la [auditoría inicial](AUDIT-2026-11-09.md) documentan revisiones
 concretas; no son instrucciones de instalación ni un dictamen sobre el HEAD actual.
-La [revisión de documentación pública](PUBLIC-DOCS-AUDIT.md) delimita esta última revisión.
+La [revisión de documentación pública](PUBLIC-DOCS-AUDIT.md) delimita la reorganización
+inicial. La [auditoría de opciones](OPTIONS-AUDIT.md) recoge el inventario y su cobertura.

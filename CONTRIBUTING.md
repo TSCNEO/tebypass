@@ -33,6 +33,7 @@ requiere Docker y capacidades de red en un entorno aislado.
 ## Entregas
 
 Cambios mayores en rama descriptiva, commits Conventional Commits y comprobaciones
-completas antes de integrar. Documentar cambios de API/modelos/arquitectura y decisiones
+completas antes de integrar. Al cambiar opciones, endpoints o acciones del panel,
+seguir el [procedimiento de cobertura documental](docs/OPTIONS-AUDIT.md#mantener-la-cobertura). Documentar cambios de API/modelos/arquitectura y decisiones
 no triviales. [Publicación](docs/RELEASING.md) es un procedimiento del mantenedor,
 separado de la instalación de usuarios.
