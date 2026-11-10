@@ -23,6 +23,8 @@ operativa están registradas en PHASES.md.
 
 - Matriz de laboratorio por modelo/firmware para Omada, OPNsense y MikroTik.
 - Formatos UniFi legacy y listas vinculadas adicionales de stopliga.
-- Múltiples políticas/salidas por instalación y roles de administración.
+- [Continuidad y pools VPN](VPN_POOL_PLAN.md): principal/reserva, sondas por salida y
+  fases posteriores de selección por servicio y reparto. Propuesta sin implementar.
+- Múltiples políticas por instalación y roles de administración.
 - Sidecar remoto autenticado e IPv6 de extremo a extremo.
 - Adaptadores de notificaciones específicos, métricas Prometheus y automatización de backups.

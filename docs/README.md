@@ -16,6 +16,11 @@
 - [Alcance](PROJECT.md), [roadmap](ROADMAP.md) y [publicación](RELEASING.md).
 - [Notas de versión](RELEASE_NOTES.md).
 
+## Propuestas
+
+- [Continuidad y pools VPN](VPN_POOL_PLAN.md): plan de failover, sondas por salida,
+  selección por servicio y reparto posterior. Propuesta sin implementar.
+
 ## Estado funcional
 
 [Auditoría posterior 0.2.1](POST-FIX-AUDIT-0.2.1.md): cierre de las regresiones,
