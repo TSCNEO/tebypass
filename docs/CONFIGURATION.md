@@ -28,7 +28,7 @@ no necesariamente los de una instalación existente.
 | `routing_enabled` | `true` | Interruptor global; false retira lo gestionado. Verificar resultado remoto; conserva configuración y destinos. |
 | `sync_interval_seconds` | `300` | Segundos entre ciclos; entero ≥ 0. 0 desactiva ciclos automáticos, pero cambios y peticiones manuales siguen reconciliando. |
 | `sliding_window_seconds` | `3600` | Retención adicional de IPs DNS. API acepta ≥ 0; panel propone mínimo 60. Se suma al TTL sintético de 60 s, no al TTL autoritativo. |
-| `resolve_ipv6` | `false` | Resolver también AAAA. Gateway/MikroTik lo rechazan en ajustes. Omada también es IPv4, pero su validación es incompleta: mantener false; ver F06 de la auditoría funcional. IPv4 seleccionado no cubre conexiones IPv6 del cliente. |
+| `resolve_ipv6` | `false` | Resolver también AAAA. Gateway, MikroTik y Omada solo admiten IPv4: los ajustes y destinos explícitos incompatibles se rechazan. IPv4 seleccionado no cubre conexiones IPv6 del cliente. |
 | `feed_isp_filter` | vacío | Filtro de operador de la fuente comunitaria; vacío incluye todos. No modifica su señal global ni afecta destinos manuales. |
 | `feed_force_active` | `false` | Ignora señal global comunitaria y utiliza incidencias recientes; mantiene controles de frescura y horario. No activa un feed pausado. |
 | `hayahora_feed_url` | Fuente comunitaria integrada | URL HTTP(S) sin credenciales. Cambiarla actualiza el feed que usaba la URL anterior y reinicia su caché HTTP. |
@@ -122,6 +122,9 @@ Table debe ser off si se proporciona; se añade si falta. DNS se elimina del arc
 aplicado: los clientes mantienen su DNS. AllowedIPs debe cubrir los destinos seleccionados;
 AllowedIPs no convierte por sí mismo todos los destinos en seleccionados por TeByPass.
 Una configuración de túnel válida no acredita handshake ni navegación de clientes.
+Un fallo al reemplazarla solicita restaurar el estado anterior; el error distingue si
+la restauración también falló. `wireguard/wg0.last-good.conf` conserva la última aplicada
+con permisos 0600. Incluirlo en copias y actualizar aplicación y sidecar juntos.
 
 ## Bootstrap y Docker
 

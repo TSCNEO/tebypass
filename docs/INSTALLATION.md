@@ -28,7 +28,7 @@ funciones requeridas. Si faltan, revisar las alternativas antes de crear servici
 
 La preparación específica se detalla en [Operación](OPERATIONS.md#preparación-por-router).
 No se crean VPNs de router ni se compran credenciales desde TeByPass. Una sola salida
-por instancia. Gateway y MikroTik solo aceptan IPv4. El gateway no funciona directamente
+por instancia. Gateway, MikroTik y Omada solo aceptan IPv4. El gateway no funciona directamente
 sobre el kernel de macOS/Windows; requiere un host Linux con acceso adecuado a la LAN.
 
 ## 2. Obtener la aplicación

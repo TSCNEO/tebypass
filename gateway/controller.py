@@ -280,7 +280,7 @@ async def handle_policy(message: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(fail_closed, bool):
         raise GatewayError("fail_closed must be boolean")
     await wireguard_runtime().policy(fail_closed)
-    return {"ok": True}
+    return {"ok": True, "verified": True, "fail_closed": fail_closed}
 
 
 # --------------------------------------------------------------------------- #

@@ -109,9 +109,11 @@ async def fetch_feed_now(
 ) -> dict[str, int]:
     """Force download and synchronization of a specific remote feed."""
     feed = await _load_feed(db, feed_id)
+    from app.core.engine import ROUTING_LOCK
     from app.core.feeds_sync import refresh_feed
 
-    imported = await refresh_feed(db, feed, force=True)
+    async with ROUTING_LOCK:
+        imported = await refresh_feed(db, feed, force=True)
 
     try:
         from app.core.runtime import trigger_reconciliation

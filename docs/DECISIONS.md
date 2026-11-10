@@ -345,3 +345,20 @@ No se crea ningún tag ni se cambia visibilidad como efecto de un push normal a 
 La visibilidad pública del código y de cada paquete, y el pull anónimo, son requisitos
 previos a anunciar una instalación abierta. Gateway sigue necesitando topología macvlan:
 el empaquetado elimina compilación, no puede inventar parámetros de la LAN.
+
+## 2026-11-10 — Cierre de aceptación funcional para 0.2.1
+
+- Las capacidades de destino se declaran en drivers/capabilities; los servicios validan
+  ingesta y cambio de driver antes de persistir o retirar la política anterior. Rechazar
+  feeds incompatibles conserva íntegro el último snapshot, con error visible.
+- Refrescar un feed actualiza por identidad normalizada en vez de recrear todos los
+  targets. Conserva la retención DNS de entradas que siguen presentes; elimina solo las
+  retiradas. Fetch manual comparte el lock de reconciliación para evitar snapshots concurrentes.
+- UniFi es propietario del alcance ALL_CLIENTS de su regla gestionada y verifica ese
+  alcance tras escribir, además de IPs, salida y habilitación.
+- El ACK de policy del sidecar exige verified y fail_closed coincidente; el sidecar
+  observa regla exacta de marca/tabla y ruta unreachable. Actualizar aplicación y sidecar juntos.
+- WireGuard conserva wg0.last-good.conf (0600) en el volumen después de aplicar túnel y
+  ruta. Un fallo de actualización restaura el estado previo y comunica fallo; otro fallo
+  al restaurar se comunica explícitamente. Borrar configuración elimina también el checkpoint.
+  La configuración candidata puede seguir guardada tras un error: no confundir con la aplicada.

@@ -1,4 +1,4 @@
-"""Executable acceptance gaps: strict xfail until each audited defect is corrected."""
+"""Acceptance regressions from the functional audit."""
 
 import json
 from datetime import UTC, datetime, timedelta
@@ -16,14 +16,12 @@ from app.core.resolver import NativeDNSResolver
 from app.db.models import Feed, Target
 from app.db.session import AsyncSessionLocal
 from app.drivers.base import TargetCIDR
-from app.drivers.mikrotik import MikroTikRouterDriver
 from app.drivers.mock import MockRouterDriver
 from app.drivers.unifi import UniFiRouterDriver
 from app.drivers.virtual_gateway import VirtualGatewayDriver
 from gateway.wireguard_runtime import WireGuardRuntime
 
 
-@pytest.mark.xfail(strict=True, reason="F01: refreshing an unchanged feed deletes DNS retention")
 async def test_feed_refresh_preserves_unexpired_dns_retention(db_ready: None) -> None:
     now = datetime.now(UTC)
     resolution = CachedResolution(
@@ -64,22 +62,16 @@ async def test_feed_refresh_preserves_unexpired_dns_retention(db_ready: None) ->
     assert await driver.get_current_routes() == {"198.51.100.7/32"}
 
 
-@pytest.mark.xfail(strict=True, reason="F02: API accepts IPv6 for an IPv4-only driver")
 async def test_ipv4_driver_rejects_unsupported_target_at_ingestion(
     client: httpx.AsyncClient,
 ) -> None:
     settings.router_driver = "mikrotik"
     # No router request: IPv6 is rejected inside apply_policy before HTTP is attempted.
     response = await client.post("/api/v1/targets", json={"value": "2001:db8::7/128"})
-    result = await ReconciliationEngine(driver=MikroTikRouterDriver()).reconcile()
-    assert not result.success
-    assert result.error_message == "RouterOS MVP supports IPv4 only"
     assert response.status_code in {400, 422}
+    assert (await client.get("/api/v1/targets")).json() == []
 
 
-@pytest.mark.xfail(
-    strict=True, reason="F03: changing WireGuard loses the previous active config on failure"
-)
 async def test_wireguard_reload_restores_previous_config_on_activation_failure(
     tmp_path: Path,
 ) -> None:
@@ -99,13 +91,10 @@ async def test_wireguard_reload_restores_previous_config_on_activation_failure(
     with patch.object(runtime, "stop", AsyncMock()) as stop:
         with pytest.raises(RuntimeError, match="network command failed"):
             await runtime.reload()
-        stop.assert_awaited_once()
+        assert stop.await_count == 2
     assert runtime.active.read_text() == previous
 
 
-@pytest.mark.xfail(
-    strict=True, reason="F04: UniFi accepts retained device scope instead of verifying ALL_CLIENTS"
-)
 async def test_unifi_reconciles_managed_client_scope() -> None:
     driver = UniFiRouterDriver()
     driver.controller_url = "https://router.example.net"
@@ -133,7 +122,6 @@ async def test_unifi_reconciles_managed_client_scope() -> None:
     assert route["target_devices"] == [{"type": "ALL_CLIENTS"}]
 
 
-@pytest.mark.xfail(strict=True, reason="F05: gateway policy timeout can still return success")
 async def test_gateway_requires_fail_closed_policy_acknowledgement() -> None:
     driver = VirtualGatewayDriver()
     replies = [
@@ -183,9 +171,6 @@ async def test_manual_and_feed_union_survives_pause_then_global_shutdown(db_read
     assert not await driver.get_current_routes()
 
 
-@pytest.mark.xfail(
-    strict=True, reason="F06: Omada accepts IPv6 settings but its backend is IPv4-only"
-)
 async def test_omada_rejects_ipv6_configuration_before_backend_failure(db_ready: None) -> None:
     from stopliga.errors import UnsupportedRouteShapeError
     from stopliga.routers.omada import _collapse_destinations

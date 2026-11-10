@@ -17,7 +17,7 @@ retira ese fichero dentro del volumen y arranca de nuevo: genera otra clave. Con
 El API acepta Bearer con la misma clave. El navegador usa cookie firmada de 12 horas.
 
 Guarda copia consistente de SQLite (API backup de sqlite3) junto con `gateway_targets.json`, `.secret_key`,
-`admin_token` y `wireguard/wg0.conf`, con acceso restringido. No copies solo el `.db`
+`admin_token` y todo el directorio `wireguard/` (incluido `wg0.last-good.conf`), con acceso restringido. No copies solo el `.db`
 mientras hay escritores sin usar backup o detener el servicio: puede haber datos en WAL.
 
 ## Preparación por router
@@ -70,7 +70,9 @@ docker compose --profile gateway up -d --wait
 
 5. Guarda el driver virtual y sigue [la carga de WireGuard](../README.md#cargar-la-configuración-wireguard). El controlador valida, configura `Table=off`, elimina
    DNS del archivo aplicado y rechaza hooks. Guardar/aplicar y borrar/detener son operaciones
-   distintas del mero estado “fichero presente”. Un 502 exige revisar y volver a aplicar.
+   distintas del mero estado “fichero presente”. Si falla un reemplazo, se intenta restaurar
+   el túnel y ruta anteriores; un error distingue si también falló la restauración. Un 502
+   exige revisar antes de reintentar: la candidata guardada puede diferir de la aplicada.
 6. Prueba desde **otro equipo LAN**: ping a la IP elegida y Probar conexión. En macvlan el
    host normalmente no puede alcanzar directamente al contenedor. Revisa estado del socket,
    WireGuard, handshake y eventos desde la API autenticada.
@@ -112,7 +114,7 @@ docker compose up -d --wait
 ```
 
 Si utilizas el sidecar, añade `--profile gateway` a ambos comandos. También puedes
-seleccionar una versión de ambas imágenes en `.env`, por ejemplo `TEBYPASS_IMAGE_TAG=0.2.0`.
+seleccionar una versión de ambas imágenes en `.env`, por ejemplo `TEBYPASS_IMAGE_TAG=0.2.1`.
 `latest` solo se promueve con tags estables; `edge` sigue main y no es un canal estable.
 Los tags `sha-<12 caracteres>` identifican el código de main; `build-<run>-<attempt>`
 identifica una ejecución concreta, diferenciando builds de main y de release. Las imágenes

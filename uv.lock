@@ -1298,7 +1298,7 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "tebypass"
-version = "0.2.0"
+version = "0.2.1"
 source = { editable = "." }
 dependencies = [
     { name = "aiosqlite" },

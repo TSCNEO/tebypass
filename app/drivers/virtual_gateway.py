@@ -126,14 +126,20 @@ class VirtualGatewayDriver(BaseRouterDriver):
         response = await self._socket_request(
             {"cmd": "policy", "fail_closed": settings.gateway_fail_closed}
         )
-        if response is not None and not response.get("ok"):
+        if (
+            response is None
+            or not response.get("ok")
+            or response.get("verified") is not True
+            or response.get("fail_closed") is not settings.gateway_fail_closed
+        ):
             raise RuntimeError("Gateway routing policy rejected")
         return await super().apply_policy(targets, enabled)
 
     async def reload_wireguard(self) -> None:
         response = await self._socket_request({"cmd": "reload"}, timeout=30)
         if response is None or not response.get("ok"):
-            raise RuntimeError("Gateway did not apply WireGuard configuration")
+            detail = response.get("error") if response else None
+            raise RuntimeError(str(detail or "Gateway did not apply WireGuard configuration"))
 
     def get_status(self) -> DriverStatus:
         return self._status or DriverStatus(

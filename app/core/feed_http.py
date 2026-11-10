@@ -17,7 +17,7 @@ def validate_url(url: str) -> None:
 
 async def download(url: str, etag: str | None = None) -> tuple[str | None, str | None]:
     validate_url(url)
-    headers = {"User-Agent": "TeByPass/0.2.0"}
+    headers = {"User-Agent": "TeByPass/0.2.1"}
     if etag:
         headers["If-None-Match"] = etag
     async with (

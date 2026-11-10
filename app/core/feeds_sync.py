@@ -8,7 +8,7 @@ import json
 import logging
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.community import parse_snapshot
@@ -17,6 +17,7 @@ from app.core.feed_http import download
 from app.core.feeds import FeedManager
 from app.core.targets import as_utc
 from app.db.models import Feed, Target
+from app.drivers.capabilities import validate_destination
 
 logger = logging.getLogger("tebypass.feeds_sync")
 
@@ -53,14 +54,12 @@ async def refresh_feed(session: AsyncSession, feed: Feed, force: bool = False) -
             parsed = [
                 item for value in snapshot.destinations if (item := manager.parse_entry(value))
             ]
-            feed.blocked = snapshot.blocked
-            feed.source_updated_at = snapshot.updated_at
         else:
             parsed = manager.parse_content(content, feed_format=feed.format)
-            feed.blocked = None
-            feed.source_updated_at = None
         if len(parsed) > settings.feed_max_targets:
             raise ValueError("Feed exceeds target safety ceiling")
+        for item in parsed:
+            validate_destination(item.value, item.destination_type, settings.router_driver)
     except Exception as ex:
         # Keep the last valid contribution on unknown/error; never reinterpret it as OFF.
         feed.last_error = f"Feed refresh failed ({type(ex).__name__})"
@@ -68,8 +67,14 @@ async def refresh_feed(session: AsyncSession, feed: Feed, force: bool = False) -
         logger.warning("Feed refresh rejected (%s)", type(ex).__name__)
         return 0
     feed.last_error = None
-
-    await session.execute(delete(Target).where(Target.feed_id == feed.id))
+    feed.blocked = snapshot.blocked if community else None
+    feed.source_updated_at = snapshot.updated_at if community else None
+    existing = {
+        target.value: target
+        for target in (await session.execute(select(Target).where(Target.feed_id == feed.id)))
+        .scalars()
+        .all()
+    }
 
     imported = 0
     seen: set[str] = set()
@@ -77,16 +82,23 @@ async def refresh_feed(session: AsyncSession, feed: Feed, force: bool = False) -
         if item.value in seen:
             continue
         seen.add(item.value)
-        session.add(
-            Target(
-                feed_id=feed.id,
-                value=item.value,
-                destination_type=item.destination_type,
-                description=item.description or f"Imported from {feed.name}",
-                enabled=True,
+        target = existing.pop(item.value, None)
+        if target is None:
+            session.add(
+                Target(
+                    feed_id=feed.id,
+                    value=item.value,
+                    destination_type=item.destination_type,
+                    description=item.description or f"Imported from {feed.name}",
+                    enabled=True,
+                )
             )
-        )
+        else:
+            target.description = item.description or f"Imported from {feed.name}"
+            target.enabled = True
         imported += 1
+    for target in existing.values():
+        await session.delete(target)
 
     feed.last_fetched_at = now
     feed.etag = new_etag

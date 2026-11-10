@@ -275,6 +275,7 @@ class UniFiRouterDriver(BaseRouterDriver):
                 payload["network_id"] = vpn_id
                 payload["ip_addresses"] = ip_entries
                 payload["enabled"] = requested_enabled
+                payload["target_devices"] = [{"type": "ALL_CLIENTS"}]
                 put_url = f"{routes_url}/{route_id}"
                 update_resp = await client.put(put_url, json=payload)
                 if update_resp.status_code not in (200, 201):
@@ -323,6 +324,7 @@ class UniFiRouterDriver(BaseRouterDriver):
                 matched.get("enabled") != requested_enabled
                 or verified_ips != set(desired_list)
                 or matched.get("network_id") != vpn_id
+                or matched.get("target_devices") != [{"type": "ALL_CLIENTS"}]
             ):
                 if existing_route:
                     restored = await client.put(

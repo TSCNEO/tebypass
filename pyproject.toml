@@ -1,6 +1,6 @@
 [project]
 name = "tebypass"
-version = "0.2.0"
+version = "0.2.1"
 description = "Agnostic, modular L3 split-routing bypass engine for arbitrary network endpoints"
 readme = "README.md"
 requires-python = ">=3.12"

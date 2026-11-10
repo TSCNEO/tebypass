@@ -6,7 +6,7 @@ COPY requirements.lock.txt ./
 RUN pip install --no-cache-dir --require-hashes -r requirements.lock.txt
 COPY app/ ./app/
 COPY THIRD_PARTY_NOTICES.md LICENSE ./
-ARG APP_VERSION=0.2.0
+ARG APP_VERSION=0.2.1
 ARG GIT_TAG=""
 RUN printf '%s\n' "$APP_VERSION" > /app/BUILD_VERSION && printf '%s\n' "$GIT_TAG" > /app/BUILD_TAG
 ARG GIT_COMMIT=unknown

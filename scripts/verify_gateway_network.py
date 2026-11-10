@@ -61,6 +61,28 @@ async def main() -> None:
     await runtime.reload()
     assert Path("/sys/class/net/wg0").exists()
     checked("ip", "route", "get", "198.51.100.7", "mark", "0x100")
+    previous = runtime.active.read_text()
+    runtime.source.write_text(runtime.source.read_text().replace("192.0.2.2/32", "192.0.2.3/32"))
+    fail_once = True
+
+    async def fail_route_once(*args: str, stdin: str | None = None) -> tuple[int, str, str]:
+        nonlocal fail_once
+        if args[:6] == ("ip", "route", "replace", "default", "dev", "wg0") and fail_once:
+            fail_once = False
+            return 1, "", "injected route failure"
+        return await run_command(*args, stdin=stdin)
+
+    runtime.run = fail_route_once
+    try:
+        await runtime.reload()
+    except RuntimeError as error:
+        assert "previous state restored" in str(error), error
+    else:
+        raise AssertionError("Failed update must report recovery, not success")
+    assert runtime.active.read_text() == previous
+    assert Path("/sys/class/net/wg0").exists()
+    checked("ip", "route", "get", "198.51.100.7", "mark", "0x100")
+    runtime.run = run_command
     runtime.source.unlink()
     await runtime.reload()
     assert not Path("/sys/class/net/wg0").exists()

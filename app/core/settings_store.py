@@ -15,6 +15,7 @@ from app.core.crypto import decrypt_secret, encrypt_secret
 from app.db.models import AppSetting
 from app.db.session import AsyncSessionLocal
 from app.drivers import invalidate_driver
+from app.drivers.capabilities import IPV4_ONLY_DRIVERS, validate_destination
 
 logger = logging.getLogger("tebypass.settings")
 
@@ -222,8 +223,37 @@ async def _save_settings(payload: dict[str, Any]) -> None:
         or candidate.feed_max_age_seconds < 60
     ):
         raise ValueError("Feed lookback/limits must be positive (age >= 60 seconds)")
-    if candidate.resolve_ipv6 and candidate.router_driver in {"virtual_gateway", "mikrotik"}:
+    if candidate.resolve_ipv6 and candidate.router_driver in IPV4_ONLY_DRIVERS:
         raise ValueError("This driver supports IPv4 only")
+    if (
+        candidate.router_driver in IPV4_ONLY_DRIVERS
+        and candidate.router_driver != settings.router_driver
+    ):
+        from datetime import UTC, datetime
+
+        from app.db.models import ResolvedIP, Target
+
+        async with AsyncSessionLocal() as session:
+            targets = (
+                (await session.execute(select(Target).where(Target.enabled.is_(True))))
+                .scalars()
+                .all()
+            )
+            for target in targets:
+                validate_destination(target.value, target.destination_type, candidate.router_driver)
+            retained = (
+                (
+                    await session.execute(
+                        select(ResolvedIP.cidr)
+                        .join(Target)
+                        .where(Target.enabled.is_(True), ResolvedIP.expires_at > datetime.now(UTC))
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            for cidr in retained:
+                validate_destination(cidr, "cidr", candidate.router_driver)
     from app.core.feed_http import validate_url
     from app.core.schedule import community_schedule
 

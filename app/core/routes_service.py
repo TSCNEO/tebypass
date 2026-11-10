@@ -15,6 +15,7 @@ from app.core.service_errors import ServiceError
 from app.core.targets import as_utc, dedupe_key, detect_destination_type
 from app.db.models import Folder, ResolvedIP, Target
 from app.drivers import get_driver
+from app.drivers.capabilities import validate_destination
 from app.models.schemas import (
     BulkTargetImportRequest,
     BulkTargetImportResponse,
@@ -148,6 +149,10 @@ async def create_target(
         await _validate_folder(db, payload.folder_id)
 
     dest_type = payload.destination_type or detect_destination_type(raw_val)
+    try:
+        validate_destination(raw_val, dest_type, settings.router_driver)
+    except ValueError as ex:
+        raise ServiceError(status_code=400, detail=str(ex)) from ex
 
     target = Target(
         value=raw_val,
@@ -175,6 +180,14 @@ async def update_target(
     """Partially update a target (value, description, enabled flag or folder)."""
     target = await _load_target(db, target_id)
     changes = payload.model_dump(exclude_unset=True)
+    candidate = FeedManager().parse_entry(changes.get("value") or target.value)
+    if candidate is not None:
+        try:
+            validate_destination(
+                candidate.value, candidate.destination_type, settings.router_driver
+            )
+        except ValueError as ex:
+            raise ServiceError(status_code=400, detail=str(ex)) from ex
 
     if "value" in changes:
         raw_val = (changes["value"] or "").strip()
@@ -252,6 +265,11 @@ async def bulk_import_targets(
 
             parsed = manager.parse_entry(line)
             if parsed is None:
+                invalid.append(line)
+                continue
+            try:
+                validate_destination(parsed.value, parsed.destination_type, settings.router_driver)
+            except ValueError:
                 invalid.append(line)
                 continue
 

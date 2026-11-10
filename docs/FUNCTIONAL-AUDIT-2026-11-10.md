@@ -1,5 +1,8 @@
 # Auditoría de comportamiento funcional
 
+> Informe de la base indicada. Los seis hallazgos se corrigen en 0.2.1; consultar
+> la [auditoría posterior](POST-FIX-AUDIT-0.2.1.md) para resultados y límites actuales.
+
 Fecha: 2026-11-10. Base de producto: `f79c36f7e61ad427b12c0cfa3152bcd225682388`.
 Alcance: contrastar los criterios de PROJECT con ejecución de servicios, SQLite,
 API, ciclo de vida y drivers bajo fallos controlados. No es una revisión de estilo.
