@@ -1,6 +1,5 @@
 """Runtime settings and router driver diagnostics endpoints."""
 
-import asyncio
 import logging
 from typing import Any
 
@@ -76,7 +75,9 @@ async def update_settings(payload: dict[str, Any]) -> dict[str, Any]:
             confirm_remote_state_unknown=confirm_remote_state_unknown,
         )
         if not skip_auto_sync:
-            asyncio.create_task(_trigger_reconciliation_safely())
+            from app.core.runtime import schedule_reconciliation
+
+            schedule_reconciliation(force=True, runner=_trigger_reconciliation_safely)
     except ValueError as ex:
         raise ServiceError(status_code=400, detail=str(ex)) from ex
     except RuntimeError as ex:

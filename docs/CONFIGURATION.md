@@ -70,6 +70,7 @@ en el siguiente ciclo, con posible duplicado. No existe cola de cada transición
 | `unifi_route_name` | `TeByPass` | Nombre de Traffic Route gestionada; mantenerlo estable para evitar conflictos. |
 | `unifi_vpn_network_id` | vacío | ID del cliente VPN existente. Usa **Detectar** en el panel para listar las VPN con las credenciales del formulario. Si solo hay una VPN se autoselecciona; con varias VPN es obligatorio elegir una explícitamente. Vacío solo reutiliza la VPN de la regla existente o una única VPN disponible. |
 | `unifi_verify_tls` | `false` | Verificación del certificado del controlador. Activarla con certificado confiable; el valor inicial actual no verifica. |
+| `unifi_kill_switch` | `false` | Opcional: solicita `kill_switch_enabled` en la Traffic Route V2 de UniFi (bloquea destinos seleccionados si la VPN cae, según firmware del controlador). Desactivado por defecto para mantener fallback normal. |
 | `unifi_username` | vacío | Solo API, campo heredado: no implementa login usuario/contraseña en este driver. Usar API key. |
 | `unifi_password` | vacío | Solo API, secreto heredado sin autenticación efectiva en el driver actual. |
 | `unifi_group_name` | `TeByPass_Targets` | Solo API, compatibilidad heredada; el driver V2 actual no utiliza un grupo con este nombre. |

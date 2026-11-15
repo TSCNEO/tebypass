@@ -24,7 +24,7 @@ from app.api.auth import router as auth_router
 from app.core.auth import admin_token
 from app.core.bootstrap import seed_default_feed
 from app.core.config import settings
-from app.core.runtime import get_engine
+from app.core.runtime import drain_background_tasks, get_engine
 from app.core.service_errors import ServiceError
 from app.core.version import get_version_string
 from app.db.session import init_db
@@ -61,6 +61,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         yield
     finally:
         await engine.stop()
+        await drain_background_tasks()
         await get_driver().close()
 
 

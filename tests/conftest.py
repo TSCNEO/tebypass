@@ -52,6 +52,7 @@ async def db_ready(monkeypatch: pytest.MonkeyPatch) -> AsyncGenerator[None, None
 
     yield
 
+    await app.core.runtime.drain_background_tasks(timeout=1.0)
     # init_db reloads persisted values; clear them before restoring the snapshot.
     await _reset_database()
     for key, value in snapshot.items():

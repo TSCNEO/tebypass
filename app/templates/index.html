@@ -47,6 +47,15 @@
       border-radius: 6px; padding: 8px 10px; width: 100%; font-size: 14px;
     }
     input:focus, select:focus, textarea:focus { outline: none; border-color: rgba(245,158,11,.6); }
+    input[type="checkbox"] {
+      accent-color: var(--amber-glow);
+      inline-size: 1rem;
+      block-size: 1rem;
+      flex: none;
+      margin: 0;
+      cursor: pointer;
+    }
+    input[type="checkbox"]:focus-visible { outline: 2px solid var(--amber-glow); outline-offset: 2px; }
     :is(input, select, textarea):is(:user-invalid, .user-invalid-fallback) {
       border-color: rgba(239, 68, 68, .85);
     }
@@ -483,6 +492,20 @@
                 <p id="unifi-vpn-error" x-show="unifiVpnError" class="text-[11px] text-red-400 mt-1" x-text="unifiVpnError"></p>
               </div>
             </div>
+            <div class="space-y-1.5 pt-1">
+              <div class="flex items-center gap-2 min-h-[28px]">
+                <input id="unifi-kill-switch" name="unifi_kill_switch" type="checkbox"
+                       x-model="settings.unifi_kill_switch"
+                       aria-describedby="unifi-kill-switch-hint"
+                       class="!w-4 !h-4">
+                <label for="unifi-kill-switch" class="text-xs text-slate-200 cursor-pointer">
+                  Kill-switch de UniFi (<code class="mono text-[11px]">kill_switch_enabled</code>, experimental)
+                </label>
+              </div>
+              <p id="unifi-kill-switch-hint" class="text-[11px] text-slate-500">
+                Desactivado por defecto. Su comportamiento depende del firmware UniFi; solo el gateway virtual garantiza bloqueo fail-closed al caer la VPN.
+              </p>
+            </div>
           </div>
 
           <div x-show="settings.router_driver === 'mikrotik'" class="space-y-3 panel-inner rounded-md p-4 border edge">
@@ -794,7 +817,11 @@ function tebypass() {
       const d = this.routerTest.details || {};
       if (this.routerTest.healthy) {
         if (d.manual_check) return d.manual_check;
-        return d.message || 'Prueba completada sin guardar ni sincronizar; pulsa Guardar ajustes para aplicar.';
+        const base = d.message || 'Prueba completada sin guardar ni sincronizar; pulsa Guardar ajustes para aplicar.';
+        if (this.routerTest.driver === 'unifi' && d.kill_switch_enabled !== undefined) {
+          return base + ' (Kill-switch UniFi: ' + (d.kill_switch_enabled ? 'activo' : 'desactivado') + ')';
+        }
+        return base;
       }
       if (d.message) return d.message;
       if (d.error) return d.error;

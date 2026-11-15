@@ -1,3 +1,16 @@
+# TeByPass 0.2.3
+
+Actualización de mantenimiento sobre la serie 0.2 enfocada en ciclo de vida de tareas, visibilidad en UniFi y cobertura contractual de red:
+
+- **Supervisor de tareas en segundo plano (`app/core/runtime.py`):** registro con referencias fuertes, coalescing de reconciliaciones solicitadas desde servicios HTTP (`feeds_service`, `settings_service`), registro de excepciones no capturadas y drenado ordenado durante el apagado de FastAPI (`lifespan`).
+- **UniFi Kill-Switch opcional y observable (`unifi_kill_switch`):** desactivado por defecto (`false`) para no alterar instalaciones existentes; configurable desde el panel (**Ajustes → Router**) y la API, enviado en creación/actualización de Traffic Route V2 y reportado en `Probar conexión` (`details.kill_switch_enabled`) y `/api/v1/status`.
+- **Pruebas contractuales en frontera HTTP (`tests/test_stopliga_http_boundary.py`):** cobertura de ciclo completo contra servidores HTTP simulados para `StopligaAdapter` (OPNsense y Omada, incluyendo autenticación OAuth y refresco ante 401, mutación de alias/grupos, verificación de reglas, rollback ante fallo y `teardown`) sin mockear `_observe` ni `backend.sync`.
+- **Documentación y notas operativas:** verificación rápida con `sha256sum -c SHA256SUMS --ignore-missing`, aclaración de `.env.example` → `.env`, documentación de `unifi_kill_switch` y su dependencia del firmware UniFi.
+
+Actualizar **ambas imágenes a 0.2.3** si se utiliza gateway virtual (`tebypass` y `tebypass-gateway`).
+
+---
+
 # TeByPass 0.2.2
 
 Segunda publicación estable orientada a pruebas abiertas de usuarios, sobre la base de 0.2.1, con correcciones integrales de diagnóstico, seguridad operativa y usabilidad en panel y drivers:

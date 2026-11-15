@@ -38,10 +38,12 @@ class UniFiRouterDriver(BaseRouterDriver):
         self.route_name = cfg.unifi_route_name or "TeByPass"
         self.vpn_network_id = cfg.unifi_vpn_network_id
         self.verify_tls = cfg.unifi_verify_tls
+        self.kill_switch = cfg.unifi_kill_switch
         self._prefix: str | None = None
         self._last_sync: datetime | None = None
         self._observed_at: datetime | None = None
         self._active_routes: set[str] = set()
+        self._observed_kill_switch: bool | None = None
         self._routes_loaded: bool = False
         self._last_health_check: datetime | None = None
         self._cached_health_status: DriverStatus | None = None
@@ -141,9 +143,15 @@ class UniFiRouterDriver(BaseRouterDriver):
                         self._active_routes = (
                             {str(ip) for ip in ips if ip} if r.get("enabled", True) else set()
                         )
+                        self._observed_kill_switch = (
+                            bool(r.get("kill_switch_enabled"))
+                            if "kill_switch_enabled" in r
+                            else None
+                        )
                         self._routes_loaded = True
                         return set(self._active_routes)
                 self._active_routes.clear()
+                self._observed_kill_switch = None
                 self._routes_loaded = True
             except Exception as ex:
                 raise RuntimeError("Failed to query UniFi traffic routes") from ex
@@ -282,6 +290,7 @@ class UniFiRouterDriver(BaseRouterDriver):
                 payload["network_id"] = vpn_id
                 payload["ip_addresses"] = ip_entries
                 payload["enabled"] = requested_enabled
+                payload["kill_switch_enabled"] = self.kill_switch
                 payload["target_devices"] = [{"type": "ALL_CLIENTS"}]
                 put_url = f"{routes_url}/{route_id}"
                 self.policy_write_started = True
@@ -297,7 +306,7 @@ class UniFiRouterDriver(BaseRouterDriver):
                     "enabled": requested_enabled,
                     "ip_addresses": ip_entries,
                     "ip_ranges": [],
-                    "kill_switch_enabled": False,
+                    "kill_switch_enabled": self.kill_switch,
                     "matching_target": "IP",
                     "network_id": vpn_id,
                     "next_hop": "",
@@ -334,6 +343,10 @@ class UniFiRouterDriver(BaseRouterDriver):
                 or verified_ips != set(desired_list)
                 or matched.get("network_id") != vpn_id
                 or matched.get("target_devices") != [{"type": "ALL_CLIENTS"}]
+                or (
+                    "kill_switch_enabled" in matched
+                    and bool(matched.get("kill_switch_enabled")) != self.kill_switch
+                )
             ):
                 if existing_route:
                     restored = await client.put(
@@ -348,6 +361,11 @@ class UniFiRouterDriver(BaseRouterDriver):
                 )
 
             self._active_routes = set(desired_list) if requested_enabled else set()
+            self._observed_kill_switch = (
+                bool(matched.get("kill_switch_enabled"))
+                if "kill_switch_enabled" in matched
+                else self.kill_switch
+            )
             self._routes_loaded = True
             self._last_sync = datetime.now(UTC)
             duration_ms = (time.perf_counter() - start) * 1000.0
@@ -378,6 +396,11 @@ class UniFiRouterDriver(BaseRouterDriver):
                 "site": self.site,
                 "route_name": self.route_name,
                 "vpn_network_id": self.vpn_network_id,
+                "kill_switch_enabled": (
+                    self._observed_kill_switch
+                    if self._observed_kill_switch is not None
+                    else self.kill_switch
+                ),
                 "configured": is_configured,
                 "observed_at": self._observed_at.isoformat() if self._observed_at else None,
             },
@@ -439,6 +462,11 @@ class UniFiRouterDriver(BaseRouterDriver):
             "needs_vpn_selection": needs_vpn_selection,
             "ready": ready,
             "route_exists_in_unifi": route_found,
+            "kill_switch_enabled": (
+                self._observed_kill_switch
+                if self._observed_kill_switch is not None
+                else self.kill_switch
+            ),
             "configured": is_configured,
         }
         if error_msg:
@@ -487,5 +515,6 @@ class UniFiRouterDriver(BaseRouterDriver):
             ):
                 raise RuntimeError("UniFi teardown could not be verified")
         self._active_routes.clear()
+        self._observed_kill_switch = None
         self._routes_loaded = False
         self._last_sync = datetime.now(UTC)

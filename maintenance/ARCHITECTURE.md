@@ -4,8 +4,10 @@
 
 - `app/api`: adaptadores HTTP. CRUD de destinos, feeds y carpetas delega en servicios
   `app/core/*_service.py`, con errores independientes del transporte.
-- `app/core/runtime.py`: motor único del proceso. Cambios de ajustes, pausa, purga y
-  carga WireGuard adquieren `ROUTING_LOCK` con prioridad (`acquire_control_lock`) y
+- `app/core/runtime.py`: motor único del proceso y supervisor de tareas en segundo plano
+  (`track_background_task`, `schedule_reconciliation` con coalescing y referencias fuertes,
+  y `drain_background_tasks` en el apagado ordenado de `lifespan`). Cambios de ajustes, pausa,
+  purga y carga WireGuard adquieren `ROUTING_LOCK` con prioridad (`acquire_control_lock`) y
   abordan adquisiciones en curso. Un solo worker soportado.
 - `engine.py` / `resolution_store.py`: la fase de adquisición (refresco concurrente de
   feeds y resolución FQDN con concurrencia y presupuesto total acotados, más upsert

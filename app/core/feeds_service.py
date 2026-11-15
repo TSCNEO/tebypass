@@ -1,6 +1,5 @@
 """Remote feeds management endpoints."""
 
-import asyncio
 import logging
 
 from sqlalchemy import select
@@ -102,9 +101,9 @@ async def toggle_feed(
 
     bump_policy_version()
     try:
-        from app.core.runtime import trigger_reconciliation
+        from app.core.runtime import schedule_reconciliation
 
-        asyncio.create_task(trigger_reconciliation(force=True))
+        schedule_reconciliation(force=True)
     except Exception as ex:
         logger.warning("Trigger reconciliation after feed toggle failed: %s", ex)
 
@@ -125,9 +124,9 @@ async def fetch_feed_now(
 
     bump_policy_version()
     try:
-        from app.core.runtime import trigger_reconciliation
+        from app.core.runtime import schedule_reconciliation
 
-        asyncio.create_task(trigger_reconciliation(force=True))
+        schedule_reconciliation(force=True)
     except Exception as ex:
         logger.warning("Trigger reconciliation after feed fetch failed: %s", ex)
 
@@ -155,9 +154,9 @@ async def clear_feed_targets(
 
     bump_policy_version()
     try:
-        from app.core.runtime import trigger_reconciliation
+        from app.core.runtime import schedule_reconciliation
 
-        asyncio.create_task(trigger_reconciliation(force=True))
+        schedule_reconciliation(force=True)
     except Exception as ex:
         logger.warning("Trigger reconciliation after feed clear failed: %s", ex)
 

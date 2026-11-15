@@ -37,7 +37,9 @@ sobre el kernel de macOS/Windows; requiere un host Linux con acceso adecuado a l
 
 Consulta [Releases](https://github.com/TSCNEO/tebypass/releases). Si hay una entrega
 publicada, descarga su `docker-compose.yml` en un directorio persistente y comprueba
-sus checksums con `SHA256SUMS`. El Compose adjunto fija las imágenes de esa versión.
+sus checksums con `SHA256SUMS` (`sha256sum -c SHA256SUMS --ignore-missing`, o en macOS
+`shasum -a 256 -c SHA256SUMS --ignore-missing`). El Compose adjunto fija las imágenes de esa versión.
+Si necesitas ajustar puerto o parámetros de red, parte de `.env.example` copiándolo a `.env`.
 No es necesario clonar, instalar Python ni compilar:
 
 ```sh

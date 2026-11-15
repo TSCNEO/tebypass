@@ -86,6 +86,7 @@ No restaures `tebypass.db` sin su `.secret_key` original: los secretos cifrados 
 
 - **UniFi:** API key local, cliente VPN creado; selecciona VPN en Ajustes. Soporte V2.
   La política usa todos los clientes que el router alcance; no configura cada dispositivo.
+  `unifi_kill_switch` (`false` por defecto) es opcional y su comportamiento real depende del firmware del controlador.
 - **Omada:** activa Open API, registra Client ID/Secret y Controller/Omada ID. Introduce
   sitio y tipo/nombre o ID de WAN/VPN. El backend gestiona grupos propios y política.
 - **OPNsense:** prepara alias destino con el nombre configurado y una regla en
@@ -186,7 +187,7 @@ docker compose up -d --wait
 ```
 
 Si utilizas el sidecar, añade `--profile gateway` a ambos comandos. También puedes
-seleccionar una versión de ambas imágenes en `.env`, por ejemplo `TEBYPASS_IMAGE_TAG=0.2.2`.
+seleccionar una versión de ambas imágenes en `.env`, por ejemplo `TEBYPASS_IMAGE_TAG=0.2.3`.
 `latest` solo se promueve con tags estables; `edge` sigue main y no es un canal estable.
 Los tags `sha-<12 caracteres>` identifican el código de main; `build-<run>-<attempt>`
 identifica una ejecución concreta, diferenciando builds de main y de release. Las imágenes

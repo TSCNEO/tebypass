@@ -75,6 +75,9 @@ usuario ya autorizó ese alcance, continuar sin repetir confirmaciones rutinaria
 Preguntar si usará acceso LAN directo o un proxy HTTPS existente y qué puerto quiere.
 Elegir una release pública concreta si existe; comprobar assets y descarga anónima de
 las imágenes requeridas. No suponer que `latest` existe porque el repositorio sea público.
+Si necesitas consultar archivos remotos sin clonar, usa URLs raw fijadas al tag o a `main`
+(`https://raw.githubusercontent.com/TSCNEO/tebypass/main/...`); y para personalizar variables
+del host en Compose, parte de `.env.example` hacia `.env`.
 Si no hay release, ofrecer compilación del checkout explicando que requiere Git/build.
 Seguir INSTALLATION y conservar ambos archivos Compose en instalaciones compiladas.
 

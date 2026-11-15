@@ -59,6 +59,7 @@ _BOOL_KEYS: Final[set[str]] = {
     "resolve_ipv6",
     "routing_enabled",
     "unifi_verify_tls",
+    "unifi_kill_switch",
     "omada_verify_tls",
     "opnsense_verify_tls",
     "mikrotik_verify_tls",

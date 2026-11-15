@@ -140,6 +140,13 @@ class Settings(BaseSettings):
             "STOPLIGA_CONTROLLER_VERIFY_TLS",
         ),
     )
+    unifi_kill_switch: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "TEBYPASS_UNIFI_KILL_SWITCH",
+            "UNIFI_KILL_SWITCH",
+        ),
+    )
 
     omada_base_url: str = ""
     omada_client_id: str = ""

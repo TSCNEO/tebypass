@@ -16,7 +16,8 @@ Una política de salida por instalación. Aplicar y observar estado remoto antes
 confirmar éxito; estado desconocido no equivale a conjunto vacío (`GET /api/v1/routes/active`
 devuelve 502 saneado si falla la observación). Pausa/purga deben retirar o desactivar lo
 gestionado y comprobarlo. UniFi administra ALL_CLIENTS, preserva estados explícitamente
-deshabilitados (`is_active=false`) y exige selección explícita cuando existen varias VPN.
+deshabilitados (`is_active=false`), soporta `unifi_kill_switch` opcional (`false` por defecto,
+visibilizado en estado y prueba de conexión) y exige selección explícita cuando existen varias VPN.
 OPNsense valida acción/dirección/alias/gateway de su regla y MikroTik exige tabla FIB.
 La configuración candidata y la aplicada se separan: `test-router` y la detección de VPN
 evalúan candidatos en memoria sin persistir ni sincronizar, mientras el motor registra
@@ -27,7 +28,9 @@ explícita y visible. Router y SQLite no forman una transacción distribuida.
 
 ## Control de concurrencia y presupuestos de ciclo
 
-La adquisición de feeds (`feed_concurrency=4`, `feed_budget_seconds=30s`) y la
+Las reconciliaciones solicitadas desde servicios se canalizan a través del supervisor de
+`app/core/runtime.py` (referencias fuertes, coalescing por ciclo y drenado ordenado antes de
+cerrar drivers en el apagado). La adquisición de feeds (`feed_concurrency=4`, `feed_budget_seconds=30s`) y la
 resolución DNS (`dns_concurrency=16`, `dns_budget_seconds=20s`) corren fuera de
 `ROUTING_LOCK` con cancelación cooperativa por versión de política. Pausa, purga,
 cambios de ajustes y WireGuard adquieren `ROUTING_LOCK` con prioridad sobre nuevas
