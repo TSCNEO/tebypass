@@ -29,20 +29,21 @@ GET `/` redirige a login si no está autenticado.
 | POST | `/auth/session` | Crear sesión: `token`, `browser_origin` opcional; usar flujo de origen descrito arriba. |
 | DELETE | `/auth/session` | Cerrar sesión del navegador; no rota clave administrativa. |
 | GET | `/healthz` | Liveness público y esquema HTTP observado; no prueba router/VPN. |
-| GET | `/api/v1/status` | Estado global, driver, contadores, errores de feeds y última sincronización. |
+| GET | `/api/v1/status` | Estado global, driver, contadores, `feed_errors`, `dns_errors`, `uncovered_targets`, `dns_error_detail`, última sincronización y `remote_policy_state`/`remote_policy_error`. |
 | GET | `/api/v1/version` | Versión y metadatos de build. |
 | GET | `/api/v1/settings` | Ajustes editables con secretos enmascarados. |
-| PUT | `/api/v1/settings` | Objeto parcial de claves de CONFIGURATION; guarda y solicita reconciliación. |
+| PUT | `/api/v1/settings` | Objeto parcial de claves de CONFIGURATION; guarda y solicita reconciliación (salvo `skip_auto_sync: true`). Acepta también `confirm_remote_state_unknown` (controles no persistidos). |
 | GET | `/api/v1/settings/unifi/vpn-networks` | Clientes VPN descubiertos con credenciales UniFi guardadas. |
-| POST | `/api/v1/settings/test-router` | Sonda del driver guardado; `healthy`, `driver`, `details`. |
+| POST | `/api/v1/settings/unifi/vpn-networks` | Clientes VPN descubiertos usando credenciales candidatas del cuerpo JSON (o guardadas si se omiten), sin persistir ni sincronizar. |
+| POST | `/api/v1/settings/test-router` | Sonda no destructiva: acepta credenciales candidatas en el cuerpo JSON sin persistir ni sincronizar (usa las guardadas si el cuerpo está vacío). Devuelve `healthy`, `driver`, `details`. |
 | POST | `/api/v1/settings/router/purge` | Retirar política gestionada y guardar pausa global; verificar éxito. |
-| GET | `/api/v1/targets` | Destinos con lista, origen feed e IPs vigentes. |
-| POST | `/api/v1/targets` | Crear: `value`, opcionales `destination_type`, `description`, `enabled`, `folder_id`. |
-| PATCH | `/api/v1/targets/{target_id}` | Cambios parciales: value, description, enabled, folder_id. `folder_id: null` desasigna. |
+| GET | `/api/v1/targets` | Destinos con lista, origen feed, IPs vigentes y telemetría DNS (`dns_status`, `dns_error`, `dns_last_checked_at`, `dns_last_resolved_at`). |
+| POST | `/api/v1/targets` | Crear: `value`, opcionales `destination_type`, `description`, `enabled`, `folder_id`. Devuelve 409 si el destino manual ya existe. |
+| PATCH | `/api/v1/targets/{target_id}` | Cambios parciales: value, description, enabled, folder_id. `folder_id: null` desasigna. Devuelve 409 si colisiona con otro destino manual. |
 | DELETE | `/api/v1/targets/{target_id}` | Borrar destino y solicitar reconciliación. |
 | POST | `/api/v1/targets/bulk` | `entries` array de cadenas/líneas, `folder_id` y `description` opcionales; created/skipped/invalid. |
 | POST | `/api/v1/targets/{target_id}/resolve` | Resolver FQDN y persistir IPs; CIDR devuelve el propio prefijo. |
-| GET | `/api/v1/routes/active` | Prefijos observados por el driver; puede fallar si no es posible consultar el router. |
+| GET | `/api/v1/routes/active` | Prefijos observados por el driver; devuelve 502 saneado si falla la consulta al router. |
 | POST | `/api/v1/sync` | Cuerpo opcional `{"force": false}`. Force solicita refresco de fuentes sin ETag; no significa activar modo comunitario forzado. |
 | GET | `/api/v1/folders` | Listas y número de destinos. |
 | POST | `/api/v1/folders` | `name` (1–128 caracteres), `color` opcional; nombre único sin distinguir mayúsculas. |
@@ -91,13 +92,21 @@ Consultar respuesta y después `/api/v1/status`: HTTP 200 al guardar no acredita
 remota. Tras un timeout, leer estado antes de reintentar creaciones o toggle para evitar
 duplicados o invertir por segunda vez una opción.
 
+Elegir un driver distinto exige sus datos mínimos de conexión; si faltan, el PUT responde
+400 sin retirar ni persistir nada. Completar un driver ya seleccionado que nunca aplicó
+política permite corregir la URL o volver a Mock sin retirada. Si una política aplicada no
+puede retirarse, el PUT responde 502 y conserva la configuración anterior. Para aceptar de
+forma explícita que esa regla pueda seguir activa, repetir el PUT con
+`{"confirm_remote_state_unknown": true}`; el control no se guarda como ajuste y el estado
+queda `unverified` en `/api/v1/status` hasta una aplicación o retirada verificada.
+
 ## Errores y estado
 
 - 400/422: validación; revisar detalle y contrato del endpoint.
 - 401: falta credencial o es inválida; iniciar sesión/usar Bearer válido.
 - 403: origen no autorizado de sesión; revisar URL/Host e iniciar sesión de nuevo.
-- 404: recurso inexistente. 409: conflicto, como nombre duplicado de lista.
-- 502: fallo de comunicación o retirada/aplicación remota. WireGuard puede estar guardado
+- 404: recurso inexistente. 409: conflicto, como nombre duplicado de lista o destino manual duplicado.
+- 502: fallo de comunicación, observación (`/api/v1/routes/active`) o retirada/aplicación remota. WireGuard puede estar guardado
   aunque no se haya aplicado. Restablecer dependencia y reintentar conscientemente.
 - Sync puede responder HTTP 200 con `success: false`. `total_active: -1` es observación
   desconocida. No tratarlo como rutas vacías ni como éxito.

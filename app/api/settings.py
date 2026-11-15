@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Body
 
 from app.core import settings_service as service
 from app.models.schemas import RouterPurgeResponse, RouterTestResponse, UniFiVPNNetwork
@@ -25,9 +25,18 @@ async def list_unifi_vpn_networks() -> list[UniFiVPNNetwork]:
     return await service.list_unifi_vpn_networks()
 
 
+@router.post("/settings/unifi/vpn-networks", response_model=list[UniFiVPNNetwork])
+async def discover_unifi_vpn_networks(
+    payload: dict[str, Any] | None = Body(default=None),
+) -> list[UniFiVPNNetwork]:
+    return await service.list_unifi_vpn_networks(payload)
+
+
 @router.post("/settings/test-router", response_model=RouterTestResponse)
-async def test_router_driver() -> RouterTestResponse:
-    return await service.test_router_driver()
+async def test_router_driver(
+    payload: dict[str, Any] | None = Body(default=None),
+) -> RouterTestResponse:
+    return await service.test_router_driver(payload)
 
 
 @router.post("/settings/router/purge", response_model=RouterPurgeResponse)

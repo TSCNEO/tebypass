@@ -85,11 +85,12 @@ No expongas el panel por HTTP en redes no confiables.
 ## 4. Configurar la salida
 
 1. En Ajustes, seleccionar el driver elegido y completar sus campos.
-2. Probar conexión y revisar el estado detallado, no solo el healthcheck HTTP.
-3. Añadir un destino controlado para una prueba y sincronizar.
-4. Comprobar que la política aparece en el router y que un cliente usa la salida esperada.
-5. Comprobar que tráfico no seleccionado conserva su salida y que pausar retira la política.
-6. Activar las fuentes deseadas, revisar sus destinos y ajustar el intervalo.
+2. Pulsar **Probar conexión** para verificar los valores del formulario (sin guardar ni tocar rutas todavía) y revisar el estado detallado, no solo el healthcheck HTTP.
+3. Pulsar **Guardar ajustes** para persistir y lanzar la sincronización.
+4. Añadir un destino controlado para una prueba y sincronizar.
+5. Comprobar que la política aparece en el router y que un cliente usa la salida esperada.
+6. Comprobar que tráfico no seleccionado conserva su salida y que pausar retira la política.
+7. Activar las fuentes deseadas, revisar sus destinos y ajustar el intervalo.
 
 El feed inicial está pausado. Los destinos manuales habilitados siguen contribuyendo
 cuando la señal comunitaria no está activa. Un error de fuente conserva el último

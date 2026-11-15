@@ -1,30 +1,21 @@
-# TeByPass 0.2.1
+# TeByPass 0.2.2
 
-Primera versión estable publicada: enrutamiento selectivo por destino con panel en
-español, API autenticada y configuración persistente. Gateway virtual opcional: con
-router compatible se ejecuta solo la aplicación.
+Segunda publicación estable orientada a pruebas abiertas de usuarios, sobre la base de 0.2.1, con correcciones integrales de diagnóstico, seguridad operativa y usabilidad en panel y drivers:
 
-Correcciones de la auditoría funcional:
-
-- Las fuentes conservan identidad de destinos y retención DNS al refrescarse.
-- Ingesta, importación y cambios de driver rechazan IPv6 incompatible antes de modificar
-  políticas. Gateway, MikroTik y Omada son IPv4.
-- UniFi reconcilia y verifica ALL_CLIENTS, además de destinos, habilitación y salida.
-- El gateway exige confirmación de política y verifica regla de marca y ruta fail-closed.
-- Un reemplazo fallido de WireGuard intenta restaurar configuración, túnel y ruta previos.
-  Informa por separado cuando la restauración también falla. La última configuración
-  aplicada se conserva en el volumen para recuperación tras recrear el sidecar.
-
-Incluye guía de instalación manual, protocolo de entrevista para LLM, referencia de
-opciones y API, y ejemplos de router compatible y gateway virtual.
+- **UniFi Traffic Routes V2:** gestión segura de estados deshabilitados (`is_active=false`), lectura estricta de redes VPN (sin degradar errores HTTP a lista vacía), selección explícita obligatoria cuando existen varias VPNs y detección previa con credenciales candidatas (`POST /api/v1/settings/unifi/vpn-networks`).
+- **Sondas sin efectos secundarios y errores saneados:** **Probar conexión** evalúa los valores candidatos del formulario sin guardarlos ni sincronizar rutas; **Guardar ajustes** ejecuta una sola sincronización; `/api/v1/routes/active` devuelve `502` saneado ante fallos de observación sin exponer credenciales/URLs.
+- **Diagnóstico de drivers:** OPNsense verifica acción, dirección, alias y gateway de la regla y señala verificaciones parciales; MikroTik valida la existencia de la tabla FIB configurada; `virtual_gateway` distingue fallo de socket, ausencia de WireGuard (`pending_wireguard`), interfaz caída y política incompleta.
+- **Telemetría DNS y destinos:** errores DNS por objetivo (`NXDOMAIN`, timeout, presupuesto agotado) visibles en la tabla y en `/api/v1/status` (`uncovered_targets`, `dns_errors`, degradación cuando `routing_enabled=true`); unicidad global de destinos manuales entre carpetas (`HTTP 409`); preservación de líneas rechazadas en importación masiva; avisos cuando un feed activo sigue cubriendo un destino manual pausado o borrado.
+- **Feeds y Gateway:** filtro de operador inválido (`feed_isp_filter`) informa los operadores válidos y conserva el último snapshot/targets; el sidecar aplica de forma estricta la interfaz `wg0` y falla rápido ante overrides incompatibles; documentación deduplicada y procedimiento verificado de copia y restauración en [OPERATIONS.md](OPERATIONS.md#copia-de-seguridad-y-restauración-sqlite--secretos--wireguard).
 
 ## Instalación y actualización
 
 Descargar `docker-compose.yml` y `SHA256SUMS` de esta release, verificar el checksum del
 Compose y ejecutar `docker compose up -d --wait tebypass`. El gateway requiere preparación
-macvlan y el perfil opcional. Consultar las guías de la versión antes de habilitarlo.
+macvlan y el perfil opcional (`--profile gateway`). Consultar las guías de la versión antes
+de habilitarlo.
 
-Actualizar **ambas imágenes a 0.2.1** si se utiliza gateway virtual: aplicación y sidecar
+Actualizar **ambas imágenes a 0.2.2** si se utiliza gateway virtual: aplicación y sidecar
 comparten contrato de verificación de política. Guardar copia consistente del volumen,
 BD, claves y directorio WireGuard antes de actualizar. No eliminar volúmenes.
 

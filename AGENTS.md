@@ -160,70 +160,13 @@ La interfaz web de TeByPass sigue una estética **industrial / NOC / telemetría
 
 ---
 
-## 7. Protocolo para Agentes LLM: Despliegue del Virtual Gateway
+## 7. Protocolo para Agentes LLM: Despliegue
 
-Antes de aplicar este apartado, seguir [docs/LLM_DEPLOYMENT.md](docs/LLM_DEPLOYMENT.md):
-preguntar router, host y salida disponible, y elegir el driver. Con UniFi, Omada,
-OPNsense o MikroTik compatibles, desplegar solo la aplicación. Este apartado se aplica
-exclusivamente cuando se ha elegido `virtual_gateway`.
+Para cualquier despliegue asistido (router compatible, `virtual_gateway` o evaluación `mock`), la **única fuente canónica** es [docs/LLM_DEPLOYMENT.md](docs/LLM_DEPLOYMENT.md), junto con [docs/INSTALLATION.md](docs/INSTALLATION.md) y [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
-
-Cuando un agente de IA asista a un usuario en el despliegue del modo **Gateway Virtual Propio** (`tebypass-gateway`), debe seguir este flujo interactivo estructurado, sin omitir pasos ni asumir parámetros a ciegas:
-
-### 7.1 Fase 1: Descubrimiento y Topología de Red
-1. **Identificar la interfaz padre del host**:
-   - Inspeccionar interfaces de red disponibles (`ip -br link` o `ip -br addr`).
-   - Identificar cuál es la interfaz conectada a la LAN doméstica física (habitualmente `eth0`, `enp3s0` o un bridge `vmbr0` en Proxmox).
-2. **Identificar subred y puerta de enlace**:
-   - Detectar la subred local (ej. `192.0.2.0/24`) y la IP del router principal (ej. `192.0.2.1`).
-
-### 7.2 Fase 2: Selección y Escaneo de IP Libre
-1. **Buscar una dirección IP disponible**:
-   - Preguntar al usuario qué IP desea utilizar O proponerle escanear la red local en busca de una IP desocupada mediante barrido ICMP/ARP rápido:
-     ```bash
-     for ip in $(seq 20 35); do ping -c 1 -W 1 192.0.2.$ip >/dev/null 2>&1 || echo "192.0.2.$ip LIBRE"; done
-     ```
-   - Recomendar siempre una dirección fuera del rango dinámico del pool DHCP del router para evitar solapamientos.
-
-### 7.3 Fase 3: Recordatorio y Reserva DHCP Obligatoria
-1. **Recordar al usuario la reserva en el router**:
-   - **Instrucción crítica**: El agente DEBE indicar al usuario explícitamente:
-     > *"He asignado la IP X.X.X.X al Gateway Virtual. Por favor, crea una reserva fija en el servidor DHCP de tu router (UniFi, MikroTik, Keenetic, router de operadora, etc.) asociada a la dirección MAC configurada, y ponle una nota como 'TeByPass-Gateway' para no olvidarte."*
-2. **Fijar dirección MAC determinista**:
-   - En `docker-compose.yml`, configurar `mac_address` (o vía `TEBYPASS_GATEWAY_MAC` en `.env`) para que Docker no genere una MAC aleatoria en cada recreación del contenedor, asegurando que la reserva DHCP del router nunca expire ni quede huérfana.
-
-### 7.4 Fase 4: Creación de Red y Despliegue
-1. **Crear la red macvlan de Docker**:
-   ```bash
-   docker network create -d macvlan \
-     --subnet="192.0.2.0/24" \
-     --gateway="192.0.2.1" \
-     -o parent="eth0" \
-     tebypass-lan
-   ```
-2. **Configurar `.env`**:
-   ```bash
-   TEBYPASS_GATEWAY_IP=192.0.2.26
-   TEBYPASS_GATEWAY_MAC=02:42:c0:a8:01:1a
-   TEBYPASS_LAN_NETWORK=tebypass-lan
-   ```
-3. **Subir WireGuard**:
-   - Subir el archivo `wg0.conf` a través de la interfaz web (`/settings` o modal WireGuard) o depositarlo en `/data/wireguard/wg0.conf`.
-4. **Levantar el servicio**:
-   ```bash
-   docker compose --profile gateway up -d --build
-   ```
-
-### 7.5 Fase 5: Verificación y Guía de Prueba para Clientes
-1. **Comprobar conectividad y socket**:
-   - Verificar ping hacia la IP del gateway desde otro equipo de la LAN.
-   - Verificar salud vía API: `GET /api/v1/status` (driver `virtual_gateway` con estado `healthy` y transporte `unix_socket`).
-2. **Instrucciones para el usuario**:
-   - **En Smart TV / Deco**: Indicar cómo configurar IP manual en la TV poniendo como Puerta de Enlace la IP del Virtual Gateway y DNS el habitual.
-   - **En Mac / Linux**: Proporcionar el comando de ruta temporal para validar sin afectar a otros dispositivos:
-     ```bash
-     sudo route add -net <CIDR_OBJETIVO> <IP_GATEWAY>
-     ```
+- No duplicar ni resumir en este archivo pasos de descubrimiento LAN, `macvlan`, DHCP, Compose o pruebas de clientes; seguir literalmente las etapas descritas en `docs/LLM_DEPLOYMENT.md`.
+- Con routers compatibles (`unifi`, `omada`, `opnsense`, `mikrotik`) desplegar únicamente la aplicación `tebypass`; `virtual_gateway` solo se propone cuando no existe driver compatible.
+- Respetar siempre la sección 2 (prohibición de exponer IPs reales, nombres de nodos o credenciales) y usar exclusivamente rangos RFC 5737 / RFC 2606 en ejemplos y pruebas.
 
 ---
 

@@ -85,6 +85,7 @@ class MikroTikRouterDriver(BaseRouterDriver):
                     str(ipaddress.ip_network(item["dst-address"], strict=False)) for item in records
                 }
                 keep: set[str] = set()
+                self.policy_write_started = True
                 for item in records:
                     value = str(ipaddress.ip_network(item["dst-address"], strict=False))
                     if value not in desired or value in keep:
@@ -154,14 +155,40 @@ class MikroTikRouterDriver(BaseRouterDriver):
             self._health,
             len(self._routes),
             self._last_sync,
-            {"error": self._error, "routing_table": self.table},
+            {
+                "error": self._error,
+                "routing_table": self.table,
+                "ready": self._health == DriverHealth.HEALTHY,
+            },
         )
 
     async def health_check(self) -> DriverStatus:
         try:
-            await self.get_current_routes(force=True)
+            async with self._client() as client:
+                tables = await client.get("routing/table", params={"name": self.table})
+                tables.raise_for_status()
+                tables_payload = tables.json()
+                if not isinstance(tables_payload, list) or not any(
+                    isinstance(item, dict)
+                    and item.get("name") == self.table
+                    and str(item.get("fib")).lower() == "true"
+                    for item in tables_payload
+                ):
+                    raise ValueError(
+                        f"Tabla FIB '{self.table}' no encontrada en RouterOS. "
+                        "Prepara la tabla FIB con una ruta por defecto hacia tu VPN antes de sincronizar."
+                    )
+                records = await self._records(client)
+            self._routes = {
+                str(ipaddress.ip_network(item["dst-address"], strict=False))
+                for item in records
+                if item.get("disabled", "false") == "false" and item.get("table") == self.table
+            }
             self._health = DriverHealth.HEALTHY
             self._error = None
+        except ValueError as ex:
+            self._health = DriverHealth.UNHEALTHY
+            self._error = str(ex)
         except Exception:
             self._health = DriverHealth.UNHEALTHY
             self._error = "RouterOS observation failed"

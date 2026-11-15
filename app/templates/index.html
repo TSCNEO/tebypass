@@ -47,6 +47,13 @@
       border-radius: 6px; padding: 8px 10px; width: 100%; font-size: 14px;
     }
     input:focus, select:focus, textarea:focus { outline: none; border-color: rgba(245,158,11,.6); }
+    :is(input, select, textarea):is(:user-invalid, .user-invalid-fallback) {
+      border-color: rgba(239, 68, 68, .85);
+    }
+    .visually-hidden {
+      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+      overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+    }
     label.field { display: block; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #7b8695; margin-bottom: 6px; }
     .chip { border: 1px solid var(--border-edge); border-radius: 999px; padding: 5px 12px; font-size: 12px; color: #9aa5b4; transition: all .15s; }
     .chip:hover { color: #e2e8f0; border-color: #3a4250; }
@@ -103,12 +110,20 @@
       Cargando configuración…
     </div>
 
-    <div x-show="state.last_sync_error || state.feed_errors" class="panel border border-red-700 rounded-md p-3 text-sm text-red-300" role="alert">
-      <span x-text="state.last_sync_error || 'Hay fuentes con errores; se conserva su último estado válido.'"></span>
+    <div id="form-live-announcer" aria-live="polite" aria-atomic="true" class="visually-hidden"></div>
+
+    <div x-show="state.last_sync_error || state.feed_errors || state.uncovered_targets" class="panel border border-red-700 rounded-md p-3 text-sm text-red-300 space-y-1" role="alert">
+      <div x-show="state.last_sync_error" x-text="state.last_sync_error"></div>
+      <div x-show="state.uncovered_targets > 0" x-text="state.dns_error_detail || (state.uncovered_targets + ' objetivo(s) FQDN sin IP activa por fallo DNS.')"></div>
+      <div x-show="state.feed_errors > 0" x-text="(feed && feed.last_error) ? feed.last_error : 'Hay fuentes con errores; se conserva su último estado válido.'"></div>
+    </div>
+    <div x-show="state.remote_policy_state === 'unverified'" class="panel border border-amber-600 rounded-md p-3 text-sm text-amber-200" role="alert">
+      <p>No se pudo confirmar la retirada de la política anterior. Puede quedar una regla TeByPass activa en el router; revísala y elimínala manualmente. La próxima sincronización correcta con un router real (o una purga) despejará este aviso.</p>
+      <p x-show="state.remote_policy_error" class="mono text-xs text-slate-400 mt-1" x-text="state.remote_policy_error"></p>
     </div>
     <div x-show="feed" class="mono text-xs text-slate-400">
       Señal comunitaria: <b class="text-amber-400" x-text="!feed || !feed.enabled ? 'PAUSADA' : feed.blocked === null ? 'SIN CONFIRMAR' : feed.blocked ? 'BLOQUEO ACTIVO' : 'SIN BLOQUEOS'"></b>
-      <span x-show="feed && feed.last_error" class="text-red-400" x-text="feed ? feed.last_error : ''"></span>
+      <span x-show="feed && feed.last_error" class="text-red-400 ml-2" x-text="feed ? feed.last_error : ''"></span>
     </div>
     <section x-show="proxySetupNeeded" class="panel rounded-md p-4 text-sm border-amber-600" role="alert">
       <p class="text-amber-300">Actualiza la sesión para reconocer esta dirección.</p>
@@ -193,7 +208,7 @@
         <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wider mono">Dominios e IPs que van por la VPN</h2>
         <div class="ml-auto flex items-center gap-2 flex-wrap">
           <input type="search" placeholder="Buscar…" class="!w-44 !py-1.5 !text-xs" x-model="search">
-          <button class="btn btn-ghost px-3 py-1.5 rounded-md text-xs mono uppercase tracking-wider" @click="showBulkModal = true">
+          <button class="btn btn-ghost px-3 py-1.5 rounded-md text-xs mono uppercase tracking-wider" @click="openBulkModal()">
             Importar varios
           </button>
           <button class="btn btn-primary px-3 py-1.5 rounded-md text-xs mono uppercase tracking-wider" @click="openTargetModal()">
@@ -236,13 +251,15 @@
                 </td>
                 <td class="px-3 py-3">
                   <div class="flex items-center gap-2">
-                    <span class="mono text-xs" :class="t.resolved_count > 0 ? 'text-emerald-400' : 'text-slate-600'"
-                          x-text="t.destination_type === 'cidr' ? 'prefijo directo' : t.resolved_count > 0 ? t.resolved_count + ' IPs' : 'sin resolver'"></span>
+                    <span class="mono text-xs"
+                          :class="targetDnsClass(t)"
+                          x-text="targetDnsLabel(t)"></span>
                     <button x-show="t.destination_type === 'fqdn'" class="text-slate-600 hover:text-amber-400 text-[11px] mono" @click="resolveNow(t)" :disabled="busy.resolve === t.id" title="Resolver ahora">
                       <span x-show="busy.resolve !== t.id">↻</span>
                       <span x-show="busy.resolve === t.id">…</span>
                     </button>
                   </div>
+                  <div x-show="t.dns_error" class="mono text-[10px] text-red-400 truncate max-w-[240px]" :title="t.dns_error" x-text="t.dns_error"></div>
                   <div x-show="t.resolved_ips && t.resolved_ips.length" class="mono text-[10px] text-slate-600 truncate max-w-[220px]" :title="(t.resolved_ips || []).join(', ')" x-text="(t.resolved_ips || []).slice(0,3).join(', ')"></div>
                 </td>
                 <td class="px-3 py-3 text-xs text-slate-500 max-w-[200px] truncate" x-text="t.description || '—'"></td>
@@ -275,8 +292,12 @@
       </div>
       <div class="p-5 space-y-4">
         <div>
-          <label class="field">Dominio o IP</label>
-          <input x-model="targetForm.value" placeholder="mi-servicio.example.org  ·  198.51.100.0/24" class="mono">
+          <label class="field" for="target-value-input">Dominio o IP</label>
+          <input id="target-value-input" x-model="targetForm.value" placeholder="mi-servicio.example.org  ·  198.51.100.0/24" class="mono"
+                 :class="formError ? 'user-invalid-fallback' : ''"
+                 :aria-invalid="formError ? 'true' : 'false'"
+                 :aria-describedby="formError ? 'target-form-error' : null"
+                 @input="formError = ''">
           <p class="text-[11px] text-slate-600 mt-1">Acepta dominios, IPs sueltas y rangos tipo <span class="mono">203.0.113.0/24</span>.</p>
         </div>
         <div class="grid grid-cols-2 gap-3">
@@ -301,7 +322,7 @@
           <label class="field">Nota (opcional)</label>
           <input x-model="targetForm.description" placeholder="Para qué es esto">
         </div>
-        <p x-show="formError" class="text-xs text-red-400" x-text="formError"></p>
+        <p id="target-form-error" x-show="formError" class="text-xs text-red-400" x-text="formError"></p>
       </div>
       <div class="px-5 py-3 border-t edge flex justify-end gap-2">
         <button class="btn btn-ghost px-3 py-2 rounded-md text-xs mono uppercase" @click="showTargetModal = false">Cancelar</button>
@@ -321,8 +342,13 @@
       </div>
       <div class="p-5 space-y-4">
         <div>
-          <label class="field">Un destino por línea</label>
-          <textarea rows="8" class="mono !text-xs" x-model="bulkForm.entries" placeholder="uno.example.org&#10;dos.example.net&#10;198.51.100.7"></textarea>
+          <label class="field" for="bulk-entries-input">Un destino por línea</label>
+          <textarea id="bulk-entries-input" rows="8" class="mono !text-xs" x-model="bulkForm.entries"
+                    placeholder="uno.example.org&#10;dos.example.net&#10;198.51.100.7"
+                    :class="bulkError ? 'user-invalid-fallback' : ''"
+                    :aria-invalid="bulkError ? 'true' : 'false'"
+                    :aria-describedby="bulkError ? 'bulk-form-error' : null"
+                    @input="bulkError = ''"></textarea>
         </div>
         <div>
           <label class="field">Asignar a lista</label>
@@ -332,6 +358,14 @@
               <option :value="f.id" x-text="f.name"></option>
             </template>
           </select>
+        </div>
+        <div id="bulk-form-error" x-show="bulkError" class="panel-inner border border-red-700/70 rounded p-3 text-xs text-red-300 space-y-1.5" role="alert">
+          <p x-text="bulkError"></p>
+          <ul x-show="bulkInvalid.length" class="mono text-[11px] text-red-400 list-disc pl-4 max-h-28 overflow-y-auto">
+            <template x-for="(bad, idx) in bulkInvalid" :key="idx">
+              <li x-text="bad"></li>
+            </template>
+          </ul>
         </div>
       </div>
       <div class="px-5 py-3 border-t edge flex justify-end gap-2">
@@ -428,18 +462,25 @@
               </div>
               <div>
                 <div class="flex items-center justify-between mb-1">
-                  <label class="field mb-0">Interfaz WireGuard / VPN</label>
+                  <label class="field mb-0" for="unifi-vpn-select">Interfaz WireGuard / VPN</label>
                   <button type="button" @click="loadUnifiVpns()" :disabled="busyVpn" class="text-[10px] text-amber-500 hover:text-amber-400">
                     <span x-show="!busyVpn">↻ Detectar</span>
                     <span x-show="busyVpn">...</span>
                   </button>
                 </div>
-                <select x-model="settings.unifi_vpn_network_id" class="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-200 mono">
-                  <option value="">-- Autodetectar primera VPN --</option>
+                <select id="unifi-vpn-select" x-model="settings.unifi_vpn_network_id"
+                        class="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-200 mono"
+                        :required="settings.router_driver === 'unifi' && unifiVpnNetworks.length > 1"
+                        :class="unifiVpnError ? 'user-invalid-fallback' : ''"
+                        :aria-invalid="unifiVpnError ? 'true' : 'false'"
+                        :aria-describedby="unifiVpnError ? 'unifi-vpn-error' : null"
+                        @change="unifiVpnError = ''">
+                  <option value="" :disabled="unifiVpnNetworks.length > 1">-- Selecciona una VPN --</option>
                   <template x-for="vpn in unifiVpnNetworks" :key="vpn.id">
                     <option :value="vpn.id" x-text="vpn.name + ' (' + vpn.type + ')'" :selected="settings.unifi_vpn_network_id === vpn.id"></option>
                   </template>
                 </select>
+                <p id="unifi-vpn-error" x-show="unifiVpnError" class="text-[11px] text-red-400 mt-1" x-text="unifiVpnError"></p>
               </div>
             </div>
           </div>
@@ -496,9 +537,8 @@
               <span x-show="!busy.purge" x-text="settings.router_driver === 'unifi' ? 'Eliminar regla de UniFi' : 'Purgar regla del router'"></span>
               <span x-show="busy.purge">Eliminando…</span>
             </button>
-            <span x-show="routerTest" class="text-xs mono" :class="routerTest && routerTest.healthy ? 'text-emerald-400' : 'text-red-400'"
-                  x-text="routerTest ? (routerTest.healthy ? 'Conexión correcta' : 'No se pudo conectar') : ''"></span>
-            <span x-show="routerTest && !routerTest.healthy" class="text-[11px] text-slate-600 mono" x-text="routerTest ? JSON.stringify(routerTest.details) : ''"></span>
+            <span x-show="routerTest" class="text-xs mono" :class="routerTestClass()" x-text="routerTestLabel()"></span>
+            <p x-show="routerTest && routerTestSummary()" class="w-full text-[11px] text-slate-400 mono" x-text="routerTestSummary()"></p>
           </div>
         </div>
 
@@ -518,6 +558,7 @@
           <div>
             <label class="field">Filtrar el feed por operador</label>
             <input x-model="settings.feed_isp_filter" placeholder="Vacío = todos los operadores" class="mono">
+            <p x-show="feed && feed.last_error" class="text-xs text-red-400 mt-1" x-text="feed ? feed.last_error : ''"></p>
           </div>
           <div>
             <label class="field">URL del feed comunitario</label>
@@ -615,6 +656,7 @@ function tebypass() {
     settingsLoaded: false,
     proxySetupNeeded: false,
     unifiVpnNetworks: [],
+    unifiVpnError: '',
     busyVpn: false,
     wg: { configured: false, peers: 0, uploaded_at: null, preview: '' },
     wgContent: '',
@@ -632,6 +674,8 @@ function tebypass() {
     ],
     targetForm: { id: null, value: '', description: '', enabled: true, folder_id: '' },
     bulkForm: { entries: '', folder_id: '' },
+    bulkError: '',
+    bulkInvalid: [],
     folderForm: { name: '', color: '#f59e0b' },
     formError: '',
     routerTest: null,
@@ -642,6 +686,20 @@ function tebypass() {
       await Promise.all([this.loadStatus(), this.loadTargets(), this.loadFolders(), this.loadFeeds(), this.loadSettings(), this.loadWg()]);
       this.settingsLoaded = true;
       setInterval(() => this.loadStatus(), 20000);
+    },
+
+    announceError(message) {
+      const region = document.getElementById('form-live-announcer');
+      if (!region) return;
+      region.textContent = '';
+      setTimeout(() => { region.textContent = message || ''; }, 20);
+    },
+
+    focusElement(id) {
+      this.$nextTick(() => {
+        const el = document.getElementById(id);
+        if (el) el.focus();
+      });
     },
 
     async api(method, path, body) {
@@ -685,6 +743,62 @@ function tebypass() {
     lastSyncLabel() {
       const d = this.state.driver || {};
       return d.last_sync ? this.fmtDate(d.last_sync) : 'nunca';
+    },
+
+    targetDnsLabel(t) {
+      if (t.destination_type === 'cidr') return 'prefijo directo';
+      if (t.resolved_count > 0) {
+        if (t.dns_status && t.dns_status !== 'ok') {
+          return `${t.resolved_count} IPs (DNS: ${t.dns_status})`;
+        }
+        return `${t.resolved_count} IPs`;
+      }
+      if (t.dns_status && t.dns_status !== 'ok') {
+        return `Error DNS (${t.dns_status})`;
+      }
+      return 'sin resolver';
+    },
+
+    targetDnsClass(t) {
+      if (t.destination_type === 'cidr') return 'text-emerald-400';
+      if (t.resolved_count > 0) {
+        return (t.dns_status && t.dns_status !== 'ok') ? 'text-amber-400' : 'text-emerald-400';
+      }
+      if (t.dns_status && t.dns_status !== 'ok') return 'text-red-400';
+      return 'text-slate-600';
+    },
+
+    routerTestClass() {
+      if (!this.routerTest) return '';
+      const d = this.routerTest.details || {};
+      if (this.routerTest.healthy) {
+        return d.verification === 'partial' ? 'text-amber-400' : 'text-emerald-400';
+      }
+      return d.socket_ok ? 'text-amber-400' : 'text-red-400';
+    },
+
+    routerTestLabel() {
+      if (!this.routerTest) return '';
+      const d = this.routerTest.details || {};
+      if (this.routerTest.healthy) {
+        return d.verification === 'partial'
+          ? 'Conexión OK (verificación parcial)'
+          : 'Conexión correcta';
+      }
+      if (d.socket_ok) return 'Socket conectado · pendiente de configuración';
+      return 'No se pudo conectar';
+    },
+
+    routerTestSummary() {
+      if (!this.routerTest) return '';
+      const d = this.routerTest.details || {};
+      if (this.routerTest.healthy) {
+        if (d.manual_check) return d.manual_check;
+        return d.message || 'Prueba completada sin guardar ni sincronizar; pulsa Guardar ajustes para aplicar.';
+      }
+      if (d.message) return d.message;
+      if (d.error) return d.error;
+      return Object.keys(d).length ? JSON.stringify(d) : '';
     },
 
     filteredTargets() {
@@ -732,14 +846,43 @@ function tebypass() {
     async loadUnifiVpns() {
       if (this.busyVpn) return;
       this.busyVpn = true;
+      this.unifiVpnError = '';
       try {
-        const list = await this.api('GET', '/api/v1/settings/unifi/vpn-networks');
+        const payload = {
+          unifi_controller_url: this.settings.unifi_controller_url || '',
+          unifi_api_key: this.settings.unifi_api_key || '',
+          unifi_site: this.settings.unifi_site || 'default',
+          unifi_verify_tls: this.settings.unifi_verify_tls !== false
+        };
+        const list = await this.api('POST', '/api/v1/settings/unifi/vpn-networks', payload);
         this.unifiVpnNetworks = Array.isArray(list) ? list : [];
+        if (this.unifiVpnNetworks.length === 1 && !this.settings.unifi_vpn_network_id) {
+          this.settings.unifi_vpn_network_id = this.unifiVpnNetworks[0].id;
+        } else if (this.unifiVpnNetworks.length > 1 && !this.settings.unifi_vpn_network_id) {
+          this.unifiVpnError = 'Se detectaron varias redes VPN. Selecciona una antes de guardar o probar.';
+          this.announceError(this.unifiVpnError);
+        }
       } catch (e) {
-        console.warn('Could not load UniFi VPNs:', e);
+        this.unifiVpnNetworks = [];
+        this.unifiVpnError = e.message || 'No se pudieron consultar las redes VPN de UniFi.';
+        this.announceError(this.unifiVpnError);
       } finally {
         this.busyVpn = false;
       }
+    },
+
+    validateUniFiVpnSelection() {
+      if (
+        this.settings.router_driver === 'unifi'
+        && this.unifiVpnNetworks.length > 1
+        && !this.settings.unifi_vpn_network_id
+      ) {
+        this.unifiVpnError = 'Selecciona explícitamente una interfaz VPN de UniFi antes de continuar.';
+        this.announceError(this.unifiVpnError);
+        this.focusElement('unifi-vpn-select');
+        return false;
+      }
+      return true;
     },
 
     async loadWg() {
@@ -752,7 +895,7 @@ function tebypass() {
       try {
         this.feed = await this.api('POST', '/api/v1/feeds/' + this.feed.id + '/toggle');
         this.toast(this.feed.enabled ? 'Lista comunitaria activada' : 'Lista comunitaria desactivada');
-        await this.loadTargets();
+        await Promise.all([this.loadTargets(), this.loadStatus()]);
       } catch (e) { this.fail(e); }
       this.busy.feed = false;
     },
@@ -762,8 +905,12 @@ function tebypass() {
       this.busy.feed = true;
       try {
         const r = await this.api('POST', '/api/v1/feeds/' + this.feed.id + '/fetch');
-        this.toast('Lista actualizada: ' + (r.imported || 0) + ' destinos');
-        await Promise.all([this.loadFeeds(), this.loadTargets()]);
+        await Promise.all([this.loadFeeds(), this.loadTargets(), this.loadStatus()]);
+        if (this.feed && this.feed.last_error) {
+          this.toast(this.feed.last_error, 'error');
+        } else {
+          this.toast('Lista actualizada: ' + (r.imported || 0) + ' destinos');
+        }
       } catch (e) { this.fail(e); }
       this.busy.feed = false;
     },
@@ -788,10 +935,23 @@ function tebypass() {
         this.targetForm = { id: null, value: '', description: '', enabled: true, folder_id: this.activeFolder || '' };
       }
       this.showTargetModal = true;
+      this.focusElement('target-value-input');
+    },
+
+    openBulkModal() {
+      this.bulkError = '';
+      this.bulkInvalid = [];
+      this.showBulkModal = true;
+      this.focusElement('bulk-entries-input');
     },
 
     async saveTarget() {
-      if (!this.targetForm.value.trim()) { this.formError = 'Escribe un dominio o una IP.'; return; }
+      if (!this.targetForm.value.trim()) {
+        this.formError = 'Escribe un dominio o una IP.';
+        this.announceError(this.formError);
+        this.focusElement('target-value-input');
+        return;
+      }
       this.busy.save = true;
       this.formError = '';
       try {
@@ -809,15 +969,31 @@ function tebypass() {
           this.toast('Destino añadido');
         }
         this.showTargetModal = false;
-        await Promise.all([this.loadTargets(), this.loadFolders()]);
-      } catch (e) { this.formError = e.message; }
+        await Promise.all([this.loadTargets(), this.loadFolders(), this.loadStatus()]);
+      } catch (e) {
+        this.formError = e.message;
+        this.announceError(this.formError);
+        this.focusElement('target-value-input');
+      }
       this.busy.save = false;
+    },
+
+    hasActiveFeedOverlap(target) {
+      if (!target || target.feed_id) return false;
+      return this.targets.some(
+        x => x.id !== target.id && x.feed_id && x.enabled && x.value === target.value
+      );
     },
 
     async toggleTarget(t) {
       try {
-        await this.api('PATCH', '/api/v1/targets/' + t.id, { enabled: !t.enabled });
-        t.enabled = !t.enabled;
+        const nextEnabled = !t.enabled;
+        await this.api('PATCH', '/api/v1/targets/' + t.id, { enabled: nextEnabled });
+        t.enabled = nextEnabled;
+        if (!nextEnabled && this.hasActiveFeedOverlap(t)) {
+          this.toast(`Destino pausado, pero '${t.value}' sigue activo mediante una lista comunitaria.`);
+        }
+        await this.loadStatus();
       } catch (e) { this.fail(e); }
     },
 
@@ -826,31 +1002,55 @@ function tebypass() {
       try {
         const r = await this.api('POST', '/api/v1/targets/' + t.id + '/resolve');
         this.toast(r.ips && r.ips.length ? r.ips.length + ' IPs encontradas' : 'Sin respuesta DNS');
-        await this.loadTargets();
+        await Promise.all([this.loadTargets(), this.loadStatus()]);
       } catch (e) { this.fail(e); }
       this.busy.resolve = null;
     },
 
     async deleteTarget(t) {
       if (!confirm('¿Borrar ' + t.value + '?')) return;
+      const overlapped = this.hasActiveFeedOverlap(t);
       try {
         await this.api('DELETE', '/api/v1/targets/' + t.id);
-        this.toast('Destino borrado');
-        await Promise.all([this.loadTargets(), this.loadFolders()]);
+        this.toast(overlapped ? `Destino manual borrado ('${t.value}' sigue cubierto por una lista activa).` : 'Destino borrado');
+        await Promise.all([this.loadTargets(), this.loadFolders(), this.loadStatus()]);
       } catch (e) { this.fail(e); }
     },
 
     async saveBulk() {
+      this.bulkError = '';
+      this.bulkInvalid = [];
       const entries = this.bulkForm.entries.split('\n').map(l => l.trim()).filter(Boolean);
-      if (!entries.length) { this.toast('Nada que importar', 'error'); return; }
+      if (!entries.length) {
+        this.bulkError = 'Escribe al menos un dominio, IP o CIDR para importar.';
+        this.announceError(this.bulkError);
+        this.focusElement('bulk-entries-input');
+        return;
+      }
       this.busy.save = true;
       try {
         const r = await this.api('POST', '/api/v1/targets/bulk', { entries: entries, folder_id: this.bulkForm.folder_id || null });
-        this.toast('Añadidos ' + r.created + ', omitidos ' + r.skipped);
-        this.showBulkModal = false;
-        this.bulkForm.entries = '';
-        await Promise.all([this.loadTargets(), this.loadFolders()]);
-      } catch (e) { this.fail(e); }
+        if (r.created > 0) {
+          await Promise.all([this.loadTargets(), this.loadFolders(), this.loadStatus()]);
+        }
+        if (r.invalid && r.invalid.length > 0) {
+          this.bulkInvalid = r.invalid;
+          this.bulkForm.entries = r.invalid.join('\n');
+          this.bulkError = (r.created > 0 || r.skipped > 0)
+            ? `Se importaron ${r.created} (${r.skipped} omitidos), pero ${r.invalid.length} línea(s) fueron rechazadas. Corrígelas arriba y vuelve a importar.`
+            : `No se importó ninguna línea (${r.invalid.length} rechazada(s)). Revisa el formato (dominio, IPv4 o CIDR).`;
+          this.announceError(this.bulkError);
+          this.focusElement('bulk-entries-input');
+        } else {
+          this.toast('Añadidos ' + r.created + ', omitidos ' + r.skipped);
+          this.showBulkModal = false;
+          this.bulkForm.entries = '';
+        }
+      } catch (e) {
+        this.bulkError = e.message || 'No se pudo completar la importación.';
+        this.announceError(this.bulkError);
+        this.focusElement('bulk-entries-input');
+      }
       this.busy.save = false;
     },
 
@@ -887,30 +1087,53 @@ function tebypass() {
 
     openSettings() {
       this.routerTest = null;
+      this.unifiVpnError = '';
       this.showSettings = true;
-      if (this.settings.router_driver === 'unifi') this.loadUnifiVpns();
+      if (this.settings.router_driver === 'unifi' && this.settings.unifi_controller_url) {
+        this.loadUnifiVpns();
+      }
     },
 
-    async saveAllSettings() {
+    async saveAllSettings(forced) {
+      if (!this.validateUniFiVpnSelection()) return;
       this.busy.settings = true;
+      let saved = false;
       try {
-        this.settings = await this.api('PUT', '/api/v1/settings', this.settings);
+        const payload = Object.assign(
+          {},
+          this.settings,
+          { skip_auto_sync: true },
+          forced ? { confirm_remote_state_unknown: true } : {}
+        );
+        this.settings = await this.api('PUT', '/api/v1/settings', payload);
+        saved = true;
         this.toast('Ajustes guardados. Sincronizando rutas...');
         await this.syncNow();
-      } catch (e) { this.fail(e); }
+      } catch (e) {
+        if (!forced && String(e.message).includes('confirm_remote_state_unknown')) {
+          const goAhead = confirm(
+            'No se pudo retirar la regla anterior del router. Si lo has sustituido o ya no es accesible, puedes continuar aceptando que esa regla pueda seguir activa. ¿Continuar?'
+          );
+          if (goAhead) {
+            this.busy.settings = false;
+            return this.saveAllSettings(true);
+          }
+        }
+        if (saved) await this.loadStatus();
+        this.fail(e);
+      }
       this.busy.settings = false;
     },
 
     async testRouter() {
+      if (!this.validateUniFiVpnSelection()) return;
       this.busy.test = true;
       this.routerTest = null;
       try {
-        await this.api('PUT', '/api/v1/settings', this.settings);
-        this.routerTest = await this.api('POST', '/api/v1/settings/test-router', {});
-        if (this.routerTest && this.routerTest.healthy) {
-          await this.syncNow();
-        }
-      } catch (e) { this.fail(e); }
+        this.routerTest = await this.api('POST', '/api/v1/settings/test-router', this.settings);
+      } catch (e) {
+        this.fail(e);
+      }
       this.busy.test = false;
     },
 
@@ -942,8 +1165,7 @@ function tebypass() {
       this.busy.wg = true;
       try {
         const result = await this.api('POST', '/api/v1/gateway/wireguard', { content: this.wgContent });
-        this.toast(result.applied ? 'Túnel aplicado' : 'Configuración guardada para el gateway virtual');
-        this.toast('Configuración WireGuard guardada');
+        this.toast(result.applied ? 'Configuración WireGuard guardada y túnel aplicado' : 'Configuración WireGuard guardada para el gateway virtual');
         this.wgContent = '';
         await this.loadWg();
       } catch (e) { this.fail(e); }

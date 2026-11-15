@@ -54,6 +54,16 @@ class BaseRouterDriver(ABC):
 
     driver_name: str = "base"
 
+    # Set by a driver immediately before the first remote mutation of the current
+    # ``apply_policy`` call. The engine resets it and uses it to distinguish "failed
+    # before writing" from "a partial write may exist".
+    policy_write_started: bool = False
+
+    # Some backends disable a rule instead of deleting it when the desired policy is
+    # empty (UniFi keeps its last members, Omada/OPNsense may keep aliases). That
+    # configuration still belongs to the current identity and must be retired later.
+    retains_policy_when_disabled: bool = False
+
     @abstractmethod
     async def initialize(self) -> None:
         """Initialize driver resources, network sessions, or sockets."""

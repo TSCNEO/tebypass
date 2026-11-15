@@ -65,8 +65,10 @@ async def create_feed(
     db.add(feed)
     await db.commit()
 
+    from app.core.engine import bump_policy_version
     from app.core.runtime import trigger_reconciliation
 
+    bump_policy_version()
     await trigger_reconciliation(force=True)
     return _to_response(await _load_feed(db, feed.id))
 
@@ -79,8 +81,11 @@ async def delete_feed(
     feed = await _load_feed(db, feed_id)
     await db.delete(feed)
     await db.commit()
+
+    from app.core.engine import bump_policy_version
     from app.core.runtime import trigger_reconciliation
 
+    bump_policy_version()
     await trigger_reconciliation(force=False)
 
 
@@ -93,6 +98,9 @@ async def toggle_feed(
     feed.enabled = not feed.enabled
     await db.commit()
 
+    from app.core.engine import bump_policy_version
+
+    bump_policy_version()
     try:
         from app.core.runtime import trigger_reconciliation
 
@@ -109,12 +117,13 @@ async def fetch_feed_now(
 ) -> dict[str, int]:
     """Force download and synchronization of a specific remote feed."""
     feed = await _load_feed(db, feed_id)
-    from app.core.engine import ROUTING_LOCK
-    from app.core.feeds_sync import refresh_feed
+    from app.core.engine import bump_policy_version
+    from app.core.feeds_sync import feed_lock, refresh_feed
 
-    async with ROUTING_LOCK:
+    async with feed_lock(feed.id):
         imported = await refresh_feed(db, feed, force=True)
 
+    bump_policy_version()
     try:
         from app.core.runtime import trigger_reconciliation
 
@@ -142,6 +151,9 @@ async def clear_feed_targets(
     feed.last_fetched_at = None
     await db.commit()
 
+    from app.core.engine import bump_policy_version
+
+    bump_policy_version()
     try:
         from app.core.runtime import trigger_reconciliation
 

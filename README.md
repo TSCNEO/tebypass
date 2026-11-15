@@ -46,14 +46,14 @@ comandos en el servidor, podrá realizar el despliegue; si no, te guiará paso a
 2. **Prepara el servidor:** instala Docker Engine y Docker Compose v2. Los comandos
    siguientes arrancan solo la aplicación; la [guía de instalación](docs/INSTALLATION.md)
    incluye el arranque específico del gateway y la alternativa de compilar desde Git.
-3. **Descarga y arranca** la versión [0.2.1](https://github.com/TSCNEO/tebypass/releases/tag/v0.2.1).
+3. **Descarga y arranca** la versión [0.2.2](https://github.com/TSCNEO/tebypass/releases/tag/v0.2.2).
    Descarga también `SHA256SUMS` y verifica el Compose antes de ejecutarlo:
 
 ```sh
 mkdir tebypass
 cd tebypass
-curl -fLO https://github.com/TSCNEO/tebypass/releases/download/v0.2.1/docker-compose.yml
-curl -fLO https://github.com/TSCNEO/tebypass/releases/download/v0.2.1/SHA256SUMS
+curl -fLO https://github.com/TSCNEO/tebypass/releases/download/v0.2.2/docker-compose.yml
+curl -fLO https://github.com/TSCNEO/tebypass/releases/download/v0.2.2/SHA256SUMS
 ```
 
 Compara `sha256sum docker-compose.yml` con su línea en `SHA256SUMS` (en macOS,
@@ -71,13 +71,13 @@ docker compose exec tebypass cat /data/admin_token
 ```
 
 5. **Configura:** en **Ajustes**, selecciona el driver, completa sus campos, elige la
-   salida y pulsa **Probar conexión**. Con gateway virtual, arranca también su perfil
-   según la guía y sube WireGuard desde el panel.
+   salida y pulsa **Probar conexión** (y después **Guardar ajustes**). Con gateway virtual,
+   arranca también su perfil según la guía y sube WireGuard desde el panel.
 6. **Comprueba:** añade un destino de prueba controlado, sincroniza y verifica desde un
    cliente que usa la salida elegida. Comprueba también que el tráfico no seleccionado
    mantiene su salida habitual y que pausar retira el desvío.
 7. **Activa las fuentes deseadas:** la fuente inicial está pausada. Actívala después de
-   validar la salida y prepara una [copia de seguridad](docs/OPERATIONS.md#acceso-y-secretos).
+   validar la salida y prepara una [copia de seguridad](docs/OPERATIONS.md#copia-de-seguridad-y-restauración-sqlite--secretos--wireguard).
 
 Para las siguientes operaciones de una instalación compilada se deben conservar ambos
 archivos Compose. Consulta [actualización y copias](docs/OPERATIONS.md).

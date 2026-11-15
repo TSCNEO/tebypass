@@ -7,8 +7,10 @@ no necesariamente los de una instalación existente.
 
 ## Dónde configurar
 
-- **Panel:** Ajustes → Router, Motor o WireGuard. Pulsar Guardar ajustes para persistir
-  antes de cargar WireGuard. Probar conexión también guarda el formulario y puede sincronizar. WireGuard tiene su propio botón Guardar configuración.
+- **Panel:** Ajustes → Router, Motor o WireGuard. **Probar conexión** evalúa los valores
+  actuales del formulario sin guardarlos ni sincronizar rutas; pulsa **Guardar ajustes** para
+  persistir la configuración y lanzar la sincronización. WireGuard tiene su propio botón
+  **Guardar configuración**.
 - **API:** enviar solo las claves a cambiar mediante PUT. Leer primero el estado.
   La BD prevalece sobre valores de arranque; cambiar una variable de entorno no sustituye
   un ajuste ya persistido. El Compose estándar no reenvía todas las variables de Settings.
@@ -17,8 +19,14 @@ no necesariamente los de una instalación existente.
   sí pueden vaciarse, por ejemplo para quitar horario o webhook. Las claves desconocidas
   o no editables se ignoran: comprobar la respuesta y el estado después del PUT.
 - Guardar solicita reconciliación en segundo plano; éxito al guardar no equivale a
-  aplicación confirmada en el router. Cambiar identidad de router/política exige retirar
-  lo anterior; si falla, se rechaza el cambio. No existe atomicidad distribuida con la BD.
+  aplicación confirmada en el router. Elegir un driver nuevo exige sus datos mínimos; si
+  faltan, el PUT responde 400. Completar o corregir un driver ya seleccionado que nunca
+  aplicó política no exige retirada. Un cambio de identidad con política aplicada retira
+  primero lo anterior; si falla, se rechaza. Para aceptar explícitamente que una regla
+  anterior pueda seguir activa (router sustituido o inaccesible), enviar
+  `confirm_remote_state_unknown: true` en ese PUT: `/api/v1/status` mostrará
+  `remote_policy_state: unverified` hasta una aplicación o retirada verificada. No existe
+  atomicidad distribuida con la BD.
 
 ## Motor y fuentes
 
@@ -29,7 +37,7 @@ no necesariamente los de una instalación existente.
 | `sync_interval_seconds` | `300` | Segundos entre ciclos; entero ≥ 0. 0 desactiva ciclos automáticos, pero cambios y peticiones manuales siguen reconciliando. |
 | `sliding_window_seconds` | `3600` | Retención adicional de IPs DNS. API acepta ≥ 0; panel propone mínimo 60. Se usa max(ventana, TTL sintético de 60 s), no el TTL autoritativo. |
 | `resolve_ipv6` | `false` | Resolver también AAAA. Gateway, MikroTik y Omada solo admiten IPv4: los ajustes y destinos explícitos incompatibles se rechazan. IPv4 seleccionado no cubre conexiones IPv6 del cliente. |
-| `feed_isp_filter` | vacío | Filtro de operador de la fuente comunitaria; vacío incluye todos. No modifica su señal global ni afecta destinos manuales. |
+| `feed_isp_filter` | vacío | Filtro de operador de la fuente comunitaria; vacío incluye todos. Si no coincide con ningún operador del feed, se informa de los operadores disponibles y se conserva el último estado válido. No modifica su señal global ni afecta destinos manuales. |
 | `feed_force_active` | `false` | Ignora señal global comunitaria y utiliza incidencias recientes; mantiene controles de frescura y horario. No activa un feed pausado. |
 | `hayahora_feed_url` | Fuente comunitaria integrada | URL HTTP(S) sin credenciales. Cambiarla actualiza el feed que usaba la URL anterior y reinicia su caché HTTP. |
 | `feed_max_age_seconds` | `3600` | Solo API: antigüedad máxima comunitaria, mínimo 60 s. Error conserva snapshot válido anterior y degrada estado. |
@@ -60,7 +68,7 @@ en el siguiente ciclo, con posible duplicado. No existe cola de cada transición
 | `unifi_api_key` | vacío | API key local; secreto. Se envía al controlador, nunca al cliente de red. |
 | `unifi_site` | `default` | Identificador del sitio. |
 | `unifi_route_name` | `TeByPass` | Nombre de Traffic Route gestionada; mantenerlo estable para evitar conflictos. |
-| `unifi_vpn_network_id` | vacío | ID del cliente VPN existente. Guardar acceso y usar recarga de la lista VPN en panel para seleccionar explícitamente. Vacío reutiliza la VPN de la regla existente o la primera descubierta. |
+| `unifi_vpn_network_id` | vacío | ID del cliente VPN existente. Usa **Detectar** en el panel para listar las VPN con las credenciales del formulario. Si solo hay una VPN se autoselecciona; con varias VPN es obligatorio elegir una explícitamente. Vacío solo reutiliza la VPN de la regla existente o una única VPN disponible. |
 | `unifi_verify_tls` | `false` | Verificación del certificado del controlador. Activarla con certificado confiable; el valor inicial actual no verifica. |
 | `unifi_username` | vacío | Solo API, campo heredado: no implementa login usuario/contraseña en este driver. Usar API key. |
 | `unifi_password` | vacío | Solo API, secreto heredado sin autenticación efectiva en el driver actual. |
@@ -91,11 +99,11 @@ individual de clientes desde el panel. El ejemplo de recorrido está en el READM
 | `opnsense_api_key` | vacío | API key; secreto. |
 | `opnsense_api_secret` | vacío | API secret; secreto. |
 | `opnsense_alias_name` | `TeByPass_Targets` | Alias destino preparado previamente y referenciado por la regla. |
-| `opnsense_route_name` | `TeByPass` | Descripción exacta de la regla Rules [new]/Automation Filter previamente creada con gateway VPN. |
+| `opnsense_route_name` | `TeByPass` | Descripción exacta de la regla Rules [new]/Automation Filter previamente creada con acción Pass, dirección `in`, el alias configurado y gateway VPN no predeterminado. |
 | `opnsense_verify_tls` | `true` | Verificar certificado del firewall. |
 
-TeByPass actualiza alias y activa/desactiva la regla; no crea la topología ni el túnel.
-El gateway se selecciona en la regla del firewall.
+TeByPass actualiza alias, comprueba la compatibilidad de la regla y la activa/desactiva;
+no crea la topología ni el túnel. El gateway se selecciona en la regla del firewall.
 
 ## MikroTik — Ajustes → Router
 
@@ -105,7 +113,7 @@ El gateway se selecciona en la regla del firewall.
 | `mikrotik_username` | vacío | Usuario con acceso REST y permisos para las reglas gestionadas. |
 | `mikrotik_password` | vacío | Contraseña; secreto. |
 | `mikrotik_address_list` | `TeByPass_Targets` | Prefijo de propiedad de reglas, pese al nombre histórico de la clave. Usa comentario `<prefijo>:managed`; no crea una address-list. |
-| `mikrotik_routing_table` | vacío | Tabla FIB existente con ruta por defecto a la VPN. Usa lookup-only-in-table; revisar prioridades, FastTrack y mangle. |
+| `mikrotik_routing_table` | vacío | Tabla FIB existente con ruta por defecto a la VPN. `Probar conexión` verifica que la tabla exista con flag `fib`. Usa lookup-only-in-table; revisar prioridades, FastTrack y mangle. |
 | `mikrotik_verify_tls` | `true` | Verificar certificado del router. |
 
 ## WireGuard — Ajustes → WireGuard
@@ -157,7 +165,7 @@ El driver admite `TEBYPASS_GATEWAY_SOCKET` y la clave de cifrado puede inyectars
 compartido `/data/gateway.sock`. No personalizar una sola mitad de esta integración.
 Las opciones de mantenimiento del entrypoint del sidecar `TEBYPASS_CONTROLLER_BIN` y
 `TEBYPASS_WG_DIR` cambian ejecutable/directorio internos; `TEBYPASS_GATEWAY_WG_IFACE`
-selecciona interfaz (wg0) y `TEBYPASS_GATEWAY_CHECKPOINT` el checkpoint de destinos
+solo admite la interfaz fija `wg0` (cualquier otro valor falla al arrancar) y `TEBYPASS_GATEWAY_CHECKPOINT` fija el checkpoint de destinos
 (`/data/gateway_targets.json`). No sustituyen la configuración
 operativa. Mantener sus valores del contenedor salvo desarrollo.
 

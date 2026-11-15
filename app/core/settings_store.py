@@ -12,6 +12,21 @@ from sqlalchemy import delete, select
 
 from app.core.config import Settings, settings
 from app.core.crypto import decrypt_secret, encrypt_secret
+from app.core.driver_configuration import (
+    IDENTITY_KEYS,
+    driver_identity,
+    missing_driver_configuration,
+)
+from app.core.policy_ownership import (
+    clear_policy_owner,
+    clear_unverified_remote_state,
+    is_ownership_tracked,
+    latest_applied_policy,
+    mark_ownership_tracked,
+    read_policy_owner,
+    read_unverified_remote_state,
+    record_unverified_remote_state,
+)
 from app.db.models import AppSetting
 from app.db.session import AsyncSessionLocal
 from app.drivers import invalidate_driver
@@ -59,6 +74,10 @@ _NON_EDITABLE_KEYS: Final[set[str]] = {
     "gateway_nft_set_name",
     "gateway_control_socket",
     "wireguard_config_path",
+    "dns_concurrency",
+    "dns_budget_seconds",
+    "feed_concurrency",
+    "feed_budget_seconds",
 }
 
 _TRUTHY: Final[set[str]] = {"1", "true", "yes", "on"}
@@ -191,19 +210,99 @@ async def load_into_settings() -> None:
     logger.info("Loaded %d persisted settings from SQLite", applied)
 
 
-async def save_settings(payload: dict[str, Any]) -> None:
+async def save_settings(
+    payload: dict[str, Any],
+    *,
+    confirm_remote_state_unknown: bool = False,
+) -> None:
     """Apply settings between reconciliation cycles."""
-    from app.core.engine import ROUTING_LOCK
+    from app.core.engine import acquire_control_lock
 
-    async with ROUTING_LOCK:
-        await _save_settings(payload)
+    async with acquire_control_lock():
+        await _save_settings(
+            payload,
+            confirm_remote_state_unknown=confirm_remote_state_unknown,
+        )
 
 
-async def _save_settings(payload: dict[str, Any]) -> None:
+async def _retire_previous_configuration(*, confirm_remote_state_unknown: bool) -> None:
+    """Retire an owned policy before an identity change, or explain why it is safe to skip.
+
+    A candidate that could not have written (missing credentials) or whose ownership was
+    never recorded is corrected directly. When ownership exists, retirement must be
+    verified: an unreachable router rejects the change unless the caller explicitly
+    acknowledges that the previous policy may remain.
+    """
+    from app.drivers import get_driver
+
+    current_driver = settings.router_driver
+    if current_driver == "mock":
+        return
+
+    owner = await read_policy_owner()
+    current_identity = driver_identity(settings)
+    missing = missing_driver_configuration(settings)
+    unverified = await read_unverified_remote_state()
+
+    if owner is not None and owner.identity == current_identity:
+        reason = "the current configuration owns a remote policy"
+    elif owner is not None:
+        reason = "a policy was applied under a different configuration identity"
+    elif missing:
+        logger.info(
+            "Skipping teardown for %s: incomplete configuration (%s) cannot have written",
+            current_driver,
+            ", ".join(missing),
+        )
+        return
+    elif unverified is not None:
+        logger.info(
+            "Skipping teardown for %s: remote state was already acknowledged as unknown",
+            current_driver,
+        )
+        return
+    elif not await is_ownership_tracked() and await latest_applied_policy(current_driver):
+        reason = "the last successful sync applied a policy (pre-ownership installation)"
+    else:
+        logger.info("Skipping teardown for %s: no applied policy recorded", current_driver)
+        return
+
+    try:
+        await get_driver().teardown()
+    except Exception as ex:
+        if not confirm_remote_state_unknown:
+            raise RuntimeError(
+                f"Cannot retire the previous router configuration ({current_driver}): {ex}. "
+                "Restore access to the router and retry, or send "
+                "confirm_remote_state_unknown=true to accept that the previous policy may remain."
+            ) from ex
+        logger.warning(
+            "Identity change persisted after an unverified teardown (%s, %s): %s",
+            current_driver,
+            reason,
+            ex,
+        )
+        await record_unverified_remote_state(current_driver, str(ex))
+        await clear_policy_owner()
+        return
+
+    await clear_policy_owner()
+    await clear_unverified_remote_state()
+
+
+async def _save_settings(
+    payload: dict[str, Any],
+    *,
+    confirm_remote_state_unknown: bool = False,
+) -> None:
     """Validate, persist (encrypting secrets) and hot-apply a batch of settings.
 
     Unknown keys are ignored, as are ``None``/empty values and the ``***saved***`` mask so a
     masked secret returned by the API never overwrites the real stored secret.
+
+    A driver change is only an activation: the candidate must be complete enough to open a
+    connection. Completing an already-selected driver is a repair and remains possible even
+    while it is still incomplete, so a broken candidate can be fixed incrementally.
     """
     updates: dict[str, Any] = {}
     for key, raw in payload.items():
@@ -254,6 +353,10 @@ async def _save_settings(payload: dict[str, Any]) -> None:
             )
             for cidr in retained:
                 validate_destination(cidr, "cidr", candidate.router_driver)
+    if candidate.router_driver != settings.router_driver:
+        missing = missing_driver_configuration(candidate)
+        if missing:
+            raise ValueError(f"Driver '{candidate.router_driver}' requires: {', '.join(missing)}")
     from app.core.feed_http import validate_url
     from app.core.schedule import community_schedule
 
@@ -275,24 +378,13 @@ async def _save_settings(payload: dict[str, Any]) -> None:
         or key.startswith(("unifi_", "mikrotik_", "omada_", "opnsense_", "gateway_"))
     }
     changed_driver = any(getattr(settings, key) != updates[key] for key in driver_keys)
-    identity_keys = {
-        "router_driver",
-        "unifi_controller_url",
-        "unifi_site",
-        "unifi_route_name",
-        "omada_base_url",
-        "omada_site",
-        "omada_route_name",
-        "opnsense_host",
-        "opnsense_route_name",
-        "mikrotik_api_url",
-        "mikrotik_address_list",
-        "opnsense_alias_name",
-    }
-    if any(
-        key in identity_keys and getattr(settings, key) != value for key, value in updates.items()
-    ):
-        await get_driver().teardown()
+    identity_changed = any(
+        key in IDENTITY_KEYS and getattr(settings, key) != value for key, value in updates.items()
+    )
+    if identity_changed:
+        await _retire_previous_configuration(
+            confirm_remote_state_unknown=confirm_remote_state_unknown
+        )
     if changed_driver:
         await get_driver().close()
 
@@ -311,6 +403,24 @@ async def _save_settings(payload: dict[str, Any]) -> None:
                 feed.url = updates["hayahora_feed_url"]
                 feed.etag = None
                 feed.last_fetched_at = None
+        if any(
+            k in updates and getattr(settings, k) != updates[k]
+            for k in ("feed_isp_filter", "feed_lookback_hours", "feed_force_active")
+        ):
+            from app.db.models import Feed
+
+            community_feeds = (
+                (
+                    await session.execute(
+                        select(Feed).where(Feed.format.in_(("hayahora", "stopliga")))
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            for feed in community_feeds:
+                feed.etag = None
+                feed.last_fetched_at = None
         for key, value in updates.items():
             existing = await session.get(AppSetting, key)
             serialized = _serialize(value)
@@ -326,6 +436,9 @@ async def _save_settings(payload: dict[str, Any]) -> None:
 
     for key, value in updates.items():
         setattr(settings, key, value)
+
+    if identity_changed:
+        await mark_ownership_tracked()
 
     if changed_driver:
         invalidate_driver()

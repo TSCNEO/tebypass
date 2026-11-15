@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     feed_max_age_seconds: int = 3600
     feed_lookback_hours: int = 24
     feed_max_targets: int = 16384
+    dns_concurrency: int = 16
+    dns_budget_seconds: float = 20.0
+    feed_concurrency: int = 4
+    feed_budget_seconds: float = 30.0
 
     active_days: str = ""
     active_hours: str = ""

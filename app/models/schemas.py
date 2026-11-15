@@ -78,6 +78,10 @@ class TargetResponse(TargetBase):
     created_at: datetime
     resolved_count: int = 0
     resolved_ips: list[str] = Field(default_factory=list)
+    dns_status: str | None = None
+    dns_error: str | None = None
+    dns_last_checked_at: datetime | None = None
+    dns_last_resolved_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 
@@ -198,6 +202,11 @@ class SystemStatusResponse(BaseModel):
     last_sync_error: str | None = None
     last_attempt_at: datetime | None = None
     feed_errors: int = 0
+    dns_errors: int = 0
+    uncovered_targets: int = 0
+    dns_error_detail: str | None = None
+    remote_policy_state: str | None = None
+    remote_policy_error: str | None = None
 
 
 class PinVerifyRequest(BaseModel):

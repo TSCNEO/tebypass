@@ -37,7 +37,8 @@ DEFAULT_SOCKET_PATH = "/data/gateway.sock"
 SOCKET_MODE = 0o600
 TABLE = "inet tebypass"
 SET_NAME = os.environ.get("TEBYPASS_GATEWAY_SET", "tebypass_targets")
-WG_INTERFACE = os.environ.get("TEBYPASS_GATEWAY_WG_IFACE", "wg0")
+SUPPORTED_WG_INTERFACE = "wg0"
+WG_INTERFACE = SUPPORTED_WG_INTERFACE
 MARK = "0x100"
 NFT_BIN = shutil.which("nft") or "/usr/sbin/nft"
 IP_BIN = shutil.which("ip") or "/sbin/ip"
@@ -483,11 +484,23 @@ class ControlServer:
                 await writer.wait_closed()
 
 
+def validate_wg_interface_env() -> str:
+    """Reject unsupported TEBYPASS_GATEWAY_WG_IFACE overrides instead of diverging from wg0."""
+    configured = os.environ.get("TEBYPASS_GATEWAY_WG_IFACE", SUPPORTED_WG_INTERFACE).strip()
+    if configured and configured != SUPPORTED_WG_INTERFACE:
+        raise GatewayError(
+            f"Unsupported TEBYPASS_GATEWAY_WG_IFACE='{configured}'; "
+            f"only '{SUPPORTED_WG_INTERFACE}' is supported"
+        )
+    return SUPPORTED_WG_INTERFACE
+
+
 async def amain() -> int:
     logging.basicConfig(
         level=os.environ.get("TEBYPASS_LOG_LEVEL", "INFO").upper(),
         format="[gateway-controller] %(levelname)s %(message)s",
     )
+    validate_wg_interface_env()
     socket_path = os.environ.get("TEBYPASS_GATEWAY_SOCKET", DEFAULT_SOCKET_PATH)
     server = ControlServer(socket_path)
     await restore_checkpoint()
@@ -514,6 +527,9 @@ async def amain() -> int:
 def main() -> int:
     try:
         return asyncio.run(amain())
+    except GatewayError as ex:
+        LOG.error("%s", ex)
+        return 1
     except KeyboardInterrupt:
         return 0
 

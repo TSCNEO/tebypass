@@ -20,6 +20,68 @@ Guarda copia consistente de SQLite (API backup de sqlite3) junto con `gateway_ta
 `admin_token` y todo el directorio `wireguard/` (incluido `wg0.last-good.conf`), con acceso restringido. No copies solo el `.db`
 mientras hay escritores sin usar backup o detener el servicio: puede haber datos en WAL.
 
+### Copia de seguridad y restauración (SQLite + secretos + WireGuard)
+
+Para preparar una copia completa antes de actualizar o migrar de host:
+
+```sh
+BACKUP_DIR="$HOME/tebypass-backup-$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$BACKUP_DIR" && chmod 700 "$BACKUP_DIR"
+
+# 1. Copia consistente en caliente de SQLite (API .backup() de sqlite3)
+docker compose exec -T tebypass python3 -c "
+import sqlite3
+src = sqlite3.connect('/data/tebypass.db')
+dst = sqlite3.connect('/data/tebypass.db.bak')
+with dst:
+    src.backup(dst)
+dst.close()
+src.close()
+"
+docker compose cp tebypass:/data/tebypass.db.bak "$BACKUP_DIR/tebypass.db"
+docker compose exec -T tebypass rm -f /data/tebypass.db.bak
+
+# 2. Claves, token, checkpoint del gateway y configuración WireGuard
+for f in .secret_key admin_token gateway_targets.json; do
+  docker compose cp "tebypass:/data/$f" "$BACKUP_DIR/$f" 2>/dev/null || true
+done
+docker compose cp tebypass:/data/wireguard "$BACKUP_DIR/wireguard" 2>/dev/null || true
+
+# 3. Archivos Compose y .env locales
+cp docker-compose.yml "$BACKUP_DIR/"
+[ -f .env ] && cp .env "$BACKUP_DIR/.env"
+chmod -R go-rwx "$BACKUP_DIR"
+
+# 4. Comprobar integridad de la copia en local
+sqlite3 "$BACKUP_DIR/tebypass.db" "PRAGMA integrity_check;"
+```
+
+Para **restaurar** la copia (por ejemplo tras un fallo de actualización o en un servidor nuevo):
+
+```sh
+# 1. Detener ambos servicios antes de escribir en el volumen
+docker compose --profile gateway stop tebypass tebypass-gateway
+
+# 2. Copiar la BD verificada (eliminando restos WAL/SHM anteriores) y las claves
+docker compose cp "$BACKUP_DIR/tebypass.db" tebypass:/data/tebypass.db
+docker compose exec -T --user root tebypass sh -c 'rm -f /data/tebypass.db-wal /data/tebypass.db-shm'
+for f in .secret_key admin_token gateway_targets.json; do
+  [ -f "$BACKUP_DIR/$f" ] && docker compose cp "$BACKUP_DIR/$f" "tebypass:/data/$f"
+done
+[ -d "$BACKUP_DIR/wireguard" ] && docker compose cp "$BACKUP_DIR/wireguard" tebypass:/data/
+
+# 3. Asegurar permisos restrictivos (0600 en secretos y WireGuard)
+docker compose exec -T --user root tebypass sh -c '
+  chmod 700 /data/wireguard 2>/dev/null || true
+  chmod 600 /data/.secret_key /data/admin_token /data/gateway_targets.json /data/wireguard/* 2>/dev/null || true
+'
+
+# 4. Arrancar de nuevo y verificar /api/v1/status
+docker compose --profile gateway up -d --wait
+```
+
+No restaures `tebypass.db` sin su `.secret_key` original: los secretos cifrados de routers y webhooks no podrían descifrarse.
+
 ## Preparación por router
 
 - **UniFi:** API key local, cliente VPN creado; selecciona VPN en Ajustes. Soporte V2.
@@ -35,10 +97,15 @@ mientras hay escritores sin usar backup o detener el servicio: puede haber datos
   y usan lookup-only-in-table. FastTrack, mangle y prioridad de reglas existentes deben
   permitir ese recorrido. No se alteran reglas ajenas ni se crea el túnel.
 
-Al cambiar identidad de router/política se retira primero lo anterior. Si el dispositivo
-anterior no responde, se rechaza el cambio: restablece conectividad y vuelve a intentarlo.
-Si se produjo un fallo después de retirar reglas, vuelve a sincronizar para restaurarlas.
-No hay atomicidad distribuida entre dispositivos y base de datos.
+Al cambiar identidad de router/política con una política aplicada se retira primero lo
+anterior. Si el dispositivo anterior no responde, se rechaza el cambio y se conserva la
+configuración: restablece conectividad y vuelve a intentarlo. Un candidato incompleto que
+nunca aplicó política puede corregirse o volver a Mock sin retirada. Si el router se ha
+sustituido y no se puede verificar la retirada, confirma `confirm_remote_state_unknown` y
+comprueba manualmente la regla anterior; `/api/v1/status` mostrará `unverified` hasta una
+operación verificada. Si se produjo un fallo después de retirar reglas, vuelve a
+sincronizar para restaurarlas. No hay atomicidad distribuida entre dispositivos y base de
+datos.
 
 ## Gateway virtual: despliegue en la LAN
 
@@ -97,6 +164,11 @@ El túnel necesita AllowedIPs compatibles con los destinos seleccionados.
 - Pausa de feed: retira su contribución, sin tocar manuales. Vaciar un feed también lo
   pausa para impedir que se rellene inmediatamente. Pausa master retira todo.
 - Sincronización fallida con total -1: resultado remoto desconocido, no “cero rutas”.
+- Pausa, purga y carga WireGuard con DNS o feeds lentos: las descargas (hasta 4 en
+  paralelo, presupuesto total 30 s) y las consultas DNS (hasta 16 en paralelo, presupuesto
+  total 20 s) se ejecutan fuera del bloqueo de control y se interrumpen ante una pausa o
+  purga; si el driver ya inició una escritura remota, el control espera de forma ordenada
+  a que concluya sin realizar escrituras simultáneas.
 - Intervalo 0: modo manual. Los cambios web siguen solicitando reconciliación.
 - Horarios limitan contribuciones de feeds; no prueban que haya bloqueo. El webhook HTTPS
   notifica transiciones sin destinos ni credenciales; reintenta por ciclo si no confirma
@@ -114,7 +186,7 @@ docker compose up -d --wait
 ```
 
 Si utilizas el sidecar, añade `--profile gateway` a ambos comandos. También puedes
-seleccionar una versión de ambas imágenes en `.env`, por ejemplo `TEBYPASS_IMAGE_TAG=0.2.1`.
+seleccionar una versión de ambas imágenes en `.env`, por ejemplo `TEBYPASS_IMAGE_TAG=0.2.2`.
 `latest` solo se promueve con tags estables; `edge` sigue main y no es un canal estable.
 Los tags `sha-<12 caracteres>` identifican el código de main; `build-<run>-<attempt>`
 identifica una ejecución concreta, diferenciando builds de main y de release. Las imágenes

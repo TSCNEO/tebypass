@@ -14,10 +14,13 @@ describe todos los campos y sus valores; [API](API.md) cubre las operaciones adi
 3. Editar cambia destino, nota, habilitación o lista. **Resolver ahora** (↻) vuelve a
    consultar DNS para el FQDN. IP/CIDR directo no necesita resolución.
 4. El interruptor de una fila pausa solo esa contribución; **Borrar** elimina el registro.
-   Si otro destino/feed requiere la misma IP, esa ruta puede seguir activa.
+   No se permiten destinos manuales duplicados aunque estén en listas distintas (HTTP 409).
+   Si otro destino o feed activo requiere la misma dirección, pausar o borrar el destino
+   manual avisa de que esa ruta sigue cubierta por el feed.
 5. **Importar varios** acepta un destino por línea y lista opcional. Omite líneas vacías
-   y comentarios que empiezan por `#`. El panel informa creados y duplicados omitidos;
-   la respuesta API también contiene las líneas inválidas.
+   y comentarios que empiezan por `#`. El panel informa creados y duplicados omitidos.
+   Si hay líneas rechazadas, el modal permanece abierto conservando únicamente esas líneas
+   para corregirlas y reintentar, junto con la lista de entradas inválidas.
    El ejemplo siguiente ilustra formato, no conectividad:
 
 ```text
@@ -34,7 +37,10 @@ ofrece creación y borrado. El buscador filtra por valor, nota o lista; no modif
 
 Las IPs de FQDN se resuelven desde el servidor de TeByPass, no desde cada TV/PC. DNS
 geográfico, caché o DNS cifrado del cliente pueden producir otras IPs: comparar resultados
-si no coincide la ruta. La retención conserva IPs previas hasta su vencimiento, incluso
+si no coincide la ruta. Si falla el DNS de un dominio habilitado (por ejemplo NXDOMAIN,
+timeout o presupuesto agotado), el panel muestra el error por fila y el contador de
+objetivos sin cobertura (`uncovered_targets`), degradando el estado general cuando
+quedan sin IP activa. La retención conserva IPs previas hasta su vencimiento, incluso
 tras reinicio. Puede desviar otros servicios alojados en una IP compartida: es L3,
 no una inspección de URLs. Las rutas agregadas pueden ser menos que los destinos de la tabla.
 
@@ -47,9 +53,11 @@ pueden reponer sus registros al descargarse: editar manualmente un registro impo
 no constituye una exclusión persistente. Usar un destino manual para contribuciones propias.
 
 Estados: PAUSADA, SIN CONFIRMAR, BLOQUEO ACTIVO o SIN BLOQUEOS. Error de descarga, esquema,
-frescura o límite conserva el snapshot válido anterior y muestra degradación. La fuente
-no se convierte en vacía por un error. El modo forzado usa incidencias recientes aunque
-la señal global sea inactiva; mantiene frescura, habilitación y horario.
+frescura, límite o un filtro de operador (`feed_isp_filter`) que no coincida con el feed
+conserva el snapshot válido anterior y muestra degradación (indicando los operadores
+disponibles en el feed). La fuente no se convierte en vacía por un error. El modo forzado
+usa incidencias recientes aunque la señal global sea inactiva; mantiene frescura,
+habilitación y horario.
 
 Registrar múltiples fuentes o eliminarlas se hace por [API](API.md); el panel principal
 presenta una fuente comunitaria, no un gestor completo de feeds. Crear fuente sin
@@ -101,12 +109,12 @@ intervalo, retención, filtro de operador y webhook. Ejemplo: `mon,tue,wed,thu,f
 contribuye la fuente comunitaria; destinos manuales permanecen habilitados.
 
 El panel distingue destinos, IPs resueltas y rutas activas; no son contadores equivalentes.
-Último error/último intento y estado del driver importan más que un contenedor healthy.
-`total_active = -1` significa estado remoto desconocido. **Probar conexión en el panel guarda primero los valores del formulario**, ejecuta
-la sonda y, si está saludable, solicita sincronización. Por tanto puede cambiar políticas;
-no es una consulta sin efectos. El endpoint API test-router por separado usa los valores
-ya guardados. Revisar driver, salida, reglas y
-tráfico desde un cliente; un handshake WireGuard no acredita todas las aplicaciones.
+Último error/último intento, `uncovered_targets` y estado del driver importan más que un
+contenedor healthy. `total_active = -1` significa estado remoto desconocido. **Probar
+conexión en el panel evalúa los valores actuales del formulario sin guardarlos ni
+sincronizar rutas en el router**; pulsa **Guardar ajustes** cuando quieras persistir los
+cambios y aplicar la política. Revisar driver, salida, reglas y tráfico desde un cliente;
+un handshake WireGuard no acredita todas las aplicaciones.
 
 Para WireGuard, seguir [la carga desde el panel](../README.md#cargar-la-configuración-wireguard)
 y [diagnóstico de cliente](OPERATIONS.md#un-cliente-usa-el-gateway-pero-no-navega).

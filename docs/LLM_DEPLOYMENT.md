@@ -88,10 +88,14 @@ necesidad de pedir IPs de proxy ni ejecutar `setup_proxy.py` para usar el panel.
 
 Guiar los preparativos de [Operación](OPERATIONS.md#preparación-por-router).
 Pedir que introduzca credenciales en Ajustes, leer configuración antes de modificarla,
-seleccionar salida y probar conexión. No inventar IDs ni nombres de tablas/reglas.
+detectar y seleccionar salida explícita (en UniFi si hay varias VPN), probar conexión con
+los valores candidatos antes de guardar y, una vez válida, pulsar **Guardar ajustes**.
+No inventar IDs ni nombres de tablas/reglas.
 No sustituir el driver por Mock para hacer pasar la comprobación.
 Si cambia de router, TeByPass debe poder retirar la política anterior; ante fallo,
-recuperar su conectividad antes de insistir. No borrar reglas ajenas.
+recuperar su conectividad antes de insistir. Un driver incompleto que nunca llegó a
+aplicar política puede corregirse o volver a Mock sin retirada. No confirmar
+`confirm_remote_state_unknown` sin revisar antes el router; no borrar reglas ajenas.
 
 Continuar en la etapa 5. Esta vía no necesita la etapa 4B.
 

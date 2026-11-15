@@ -1,17 +1,20 @@
 """Target management and route synchronization endpoints."""
 
+import asyncio
 import logging
 from datetime import UTC, datetime
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.cache import SlidingWindowCache
 from app.core.config import settings
 from app.core.feeds import FeedManager
-from app.core.resolver import NativeDNSResolver
-from app.core.service_errors import ServiceError
+from app.core.resolution_store import upsert_resolved_ips
+from app.core.resolver import DNSLookupResult, NativeDNSResolver, classify_dns_exception
+from app.core.service_errors import ServiceError, sanitize_driver_error
 from app.core.targets import as_utc, dedupe_key, detect_destination_type
 from app.db.models import Folder, ResolvedIP, Target
 from app.drivers import get_driver
@@ -36,47 +39,54 @@ _TARGET_LOAD_OPTIONS = (
 
 
 async def _resolve_and_persist(db: AsyncSession, target: Target) -> list[str]:
-    """Resolve an FQDN target immediately and persist ResolvedIP records in SQLite."""
+    """Resolve an FQDN target immediately and persist ResolvedIP and DNS status in SQLite."""
     if target.destination_type != "fqdn":
         return []
+    target_id = target.id
+    target_value = target.value
+    # Release any read transaction before awaiting DNS so SQLite never upgrades a stale snapshot.
+    if db.in_transaction():
+        await db.commit()
+
     cache = SlidingWindowCache(default_window_seconds=settings.sliding_window_seconds)
     resolver = NativeDNSResolver(cache=cache)
+    now = datetime.now(UTC)
+    outcome: DNSLookupResult
+
     try:
-        resolutions = await resolver.resolve_fqdn(
-            target.value,
+        outcome = await resolver.resolve_fqdn_with_status(
+            target_value,
             window_extension_seconds=settings.sliding_window_seconds,
         )
+    except asyncio.CancelledError:
+        raise
     except Exception as ex:
-        logger.warning("Immediate resolution failed for '%s': %s", target.value, ex)
+        status, detail = classify_dns_exception(ex)
+        logger.warning("Immediate resolution failed for '%s': %s", target_value, ex)
+        outcome = DNSLookupResult(resolutions=[], status=status, error=detail)
+
+    db_target = await db.get(Target, target_id)
+    if db_target is None:
+        await db.rollback()
         return []
 
-    now = datetime.now(UTC)
-    for resolution in resolutions:
-        lookup = select(ResolvedIP).where(
-            ResolvedIP.target_id == target.id,
-            ResolvedIP.ip_address == resolution.ip_address,
-        )
-        stored = (await db.execute(lookup)).scalar_one_or_none()
-        if stored is None:
-            db.add(
-                ResolvedIP(
-                    target_id=target.id,
-                    ip_address=resolution.ip_address,
-                    cidr=resolution.cidr,
-                    first_seen_at=now,
-                    last_seen_at=now,
-                    expires_at=resolution.expires_at,
-                    ttl_seconds=resolution.dns_ttl,
-                )
-            )
-        else:
-            stored.last_seen_at = now
-            stored.expires_at = resolution.expires_at
-            stored.ttl_seconds = resolution.dns_ttl
-
-    if resolutions:
+    db_target.dns_status = outcome.status
+    db_target.dns_error = outcome.error
+    db_target.dns_last_checked_at = now
+    if outcome.resolutions:
+        db_target.dns_last_resolved_at = now
+        persisted = await upsert_resolved_ips(db, target_id, outcome.resolutions, now)
+        if not persisted:
+            await db.rollback()
+            return []
         await db.commit()
-    return sorted({r.ip_address for r in resolutions})
+        from app.core.engine import bump_policy_version
+
+        bump_policy_version()
+        return sorted({r.ip_address for r in outcome.resolutions})
+
+    await db.commit()
+    return []
 
 
 async def _trigger_background_reconciliation() -> None:
@@ -111,11 +121,20 @@ def _to_response(target: Target, now: datetime | None = None) -> TargetResponse:
         created_at=target.created_at,
         resolved_count=len(resolved_ips),
         resolved_ips=resolved_ips,
+        dns_status=target.dns_status,
+        dns_error=target.dns_error,
+        dns_last_checked_at=target.dns_last_checked_at,
+        dns_last_resolved_at=target.dns_last_resolved_at,
     )
 
 
 async def _load_target(db: AsyncSession, target_id: str) -> Target:
-    query = select(Target).where(Target.id == target_id).options(*_TARGET_LOAD_OPTIONS)
+    query = (
+        select(Target)
+        .where(Target.id == target_id)
+        .options(*_TARGET_LOAD_OPTIONS)
+        .execution_options(populate_existing=True)
+    )
     target = (await db.execute(query)).scalar_one_or_none()
     if target is None:
         raise ServiceError(status_code=404, detail="Target not found")
@@ -126,6 +145,28 @@ async def _validate_folder(db: AsyncSession, folder_id: str) -> None:
     folder = await db.get(Folder, folder_id)
     if folder is None:
         raise ServiceError(status_code=404, detail="Folder not found")
+
+
+async def _ensure_manual_target_unique(
+    db: AsyncSession,
+    canonical_value: str,
+    *,
+    exclude_target_id: str | None = None,
+) -> None:
+    query = (
+        select(Target)
+        .where(Target.feed_id.is_(None), Target.value == canonical_value)
+        .options(selectinload(Target.folder))
+    )
+    if exclude_target_id is not None:
+        query = query.where(Target.id != exclude_target_id)
+    existing = (await db.execute(query)).scalar_one_or_none()
+    if existing is not None:
+        location = f" en la carpeta '{existing.folder.name}'" if existing.folder else ""
+        raise ServiceError(
+            status_code=409,
+            detail=f"El destino manual '{canonical_value}' ya existe{location}.",
+        )
 
 
 async def list_targets(db: AsyncSession) -> list[TargetResponse]:
@@ -148,21 +189,40 @@ async def create_target(
     if payload.folder_id:
         await _validate_folder(db, payload.folder_id)
 
-    dest_type = payload.destination_type or detect_destination_type(raw_val)
+    parsed = FeedManager().parse_entry(raw_val)
+    canonical_val = parsed.value if parsed is not None else dedupe_key(raw_val)
+    dest_type = (
+        payload.destination_type
+        or (parsed.destination_type if parsed is not None else None)
+        or detect_destination_type(canonical_val)
+    )
     try:
-        validate_destination(raw_val, dest_type, settings.router_driver)
+        validate_destination(canonical_val, dest_type, settings.router_driver)
     except ValueError as ex:
         raise ServiceError(status_code=400, detail=str(ex)) from ex
 
+    await _ensure_manual_target_unique(db, canonical_val)
+
     target = Target(
-        value=raw_val,
+        value=canonical_val,
         destination_type=dest_type,
         description=payload.description,
         enabled=payload.enabled,
         folder_id=payload.folder_id,
     )
     db.add(target)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as ex:
+        await db.rollback()
+        raise ServiceError(
+            status_code=409,
+            detail=f"El destino manual '{canonical_val}' ya existe.",
+        ) from ex
+
+    from app.core.engine import bump_policy_version
+
+    bump_policy_version()
 
     if target.enabled and target.destination_type == "fqdn":
         await _resolve_and_persist(db, target)
@@ -193,14 +253,20 @@ async def update_target(
         raw_val = (changes["value"] or "").strip()
         if not raw_val:
             raise ServiceError(status_code=400, detail="Target value must not be empty")
-        from sqlalchemy import delete
-
-        await db.execute(delete(ResolvedIP).where(ResolvedIP.target_id == target.id))
         parsed = FeedManager().parse_entry(raw_val)
         if parsed is None:
             raise ServiceError(status_code=400, detail="Invalid destination")
+        if target.feed_id is None:
+            await _ensure_manual_target_unique(db, parsed.value, exclude_target_id=target.id)
+        from sqlalchemy import delete
+
+        await db.execute(delete(ResolvedIP).where(ResolvedIP.target_id == target.id))
         target.value = parsed.value
         target.destination_type = parsed.destination_type
+        target.dns_status = None
+        target.dns_error = None
+        target.dns_last_checked_at = None
+        target.dns_last_resolved_at = None
 
     if "description" in changes:
         target.description = changes["description"]
@@ -214,7 +280,18 @@ async def update_target(
             await _validate_folder(db, folder_id)
         target.folder_id = folder_id
 
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as ex:
+        await db.rollback()
+        raise ServiceError(
+            status_code=409,
+            detail=f"El destino manual '{target.value}' ya existe.",
+        ) from ex
+
+    from app.core.engine import bump_policy_version
+
+    bump_policy_version()
 
     if target.enabled and target.destination_type == "fqdn":
         await _resolve_and_persist(db, target)
@@ -236,6 +313,9 @@ async def delete_target(
 
     await db.delete(target)
     await db.commit()
+    from app.core.engine import bump_policy_version
+
+    bump_policy_version()
     await _trigger_background_reconciliation()
 
 
@@ -256,6 +336,7 @@ async def bulk_import_targets(
     created = 0
     skipped = 0
     invalid: list[str] = []
+    created_fqdns: list[Target] = []
 
     for chunk in payload.entries:
         for raw_line in chunk.splitlines():
@@ -279,26 +360,32 @@ async def bulk_import_targets(
                 continue
 
             description = payload.description or parsed.description or None
-            db.add(
-                Target(
-                    value=parsed.value,
-                    destination_type=parsed.destination_type,
-                    description=description,
-                    enabled=True,
-                    folder_id=payload.folder_id,
-                )
+            new_target = Target(
+                value=parsed.value,
+                destination_type=parsed.destination_type,
+                description=description,
+                enabled=True,
+                folder_id=payload.folder_id,
             )
+            try:
+                async with db.begin_nested():
+                    db.add(new_target)
+                    await db.flush()
+            except IntegrityError:
+                skipped += 1
+                existing_keys.add(key)
+                continue
             existing_keys.add(key)
             created += 1
+            if new_target.destination_type == "fqdn":
+                created_fqdns.append(new_target)
 
     if created:
         await db.commit()
-        # Resolve any newly imported enabled FQDN targets immediately
-        fqdn_query = select(Target).where(
-            Target.enabled == True,  # noqa: E712
-            Target.destination_type == "fqdn",
-        )
-        for t in (await db.execute(fqdn_query)).scalars().all():
+        from app.core.engine import bump_policy_version
+
+        bump_policy_version()
+        for t in created_fqdns:
             await _resolve_and_persist(db, t)
         await _trigger_background_reconciliation()
 
@@ -327,7 +414,18 @@ async def resolve_target_now(
 async def get_active_routes() -> list[str]:
     """List all CIDRs currently injected in the active router driver."""
     driver = get_driver()
-    routes = await driver.get_current_routes()
+    try:
+        routes = await driver.get_current_routes()
+    except asyncio.CancelledError:
+        raise
+    except ServiceError:
+        raise
+    except Exception as ex:
+        logger.warning("Failed to read active routes from driver '%s': %s", driver.driver_name, ex)
+        raise ServiceError(
+            status_code=502,
+            detail=sanitize_driver_error(ex, driver.driver_name, "reading active routes"),
+        ) from ex
     return sorted(routes)
 
 

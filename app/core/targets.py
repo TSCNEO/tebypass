@@ -2,7 +2,7 @@
 
 import ipaddress
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Any, Literal
 
 DestinationType = Literal["fqdn", "cidr"]
 
@@ -35,3 +35,33 @@ def dedupe_key(raw_value: str) -> str:
 def as_utc(value: datetime) -> datetime:
     """Return a timezone-aware UTC datetime (SQLite may hand back naive values)."""
     return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+
+def build_contributing_targets_query() -> Any:
+    """Build the canonical query for targets that should contribute routes right now.
+
+    Excludes paused targets, disabled feeds, community feeds with inactive global signal,
+    and community feeds outside the configured active schedule window.
+    """
+    from sqlalchemy import and_, or_, select
+
+    from app.core.schedule import community_schedule
+    from app.db.models import Feed, Target
+
+    query = (
+        select(Target)
+        .join(Feed, Target.feed_id == Feed.id, isouter=True)
+        .where(
+            Target.enabled.is_(True),
+            or_(Target.feed_id.is_(None), Feed.enabled.is_(True)),
+            or_(Target.feed_id.is_(None), Feed.blocked.is_(None), Feed.blocked.is_(True)),
+        )
+    )
+    if not community_schedule().is_active():
+        query = query.where(
+            or_(
+                Target.feed_id.is_(None),
+                and_(Feed.blocked.is_(None), Feed.format.not_in(["hayahora", "stopliga"])),
+            )
+        )
+    return query

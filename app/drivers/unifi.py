@@ -23,6 +23,7 @@ class UniFiRouterDriver(BaseRouterDriver):
     """Driver managing V2 Traffic Routes on UniFi Cloud Gateway / Dream Machine."""
 
     driver_name: str = "unifi"
+    retains_policy_when_disabled: bool = True
 
     def __init__(self, cfg: Settings | None = None) -> None:
         cfg = cfg or settings
@@ -85,7 +86,7 @@ class UniFiRouterDriver(BaseRouterDriver):
     async def get_vpn_networks(self) -> list[dict[str, Any]]:
         """List VPN client networks configured on UniFi."""
         if not self.controller_url or not self.api_key:
-            return []
+            raise RuntimeError("UniFi controller URL and API key are required")
 
         async with self._client() as client:
             prefix = await self.discover_prefix(client)
@@ -93,9 +94,11 @@ class UniFiRouterDriver(BaseRouterDriver):
             resp = await client.get(url)
             if resp.status_code != 200:
                 logger.warning(
-                    "UniFi rest/networkconf returned %s: %s", resp.status_code, resp.text
+                    "UniFi rest/networkconf returned %s: %s", resp.status_code, resp.text[:200]
                 )
-                return []
+                raise RuntimeError(
+                    f"UniFi controller returned HTTP {resp.status_code} while listing VPN networks"
+                )
             payload = resp.json()
             data = payload.get("data", []) if isinstance(payload, dict) else payload
             results = []
@@ -260,8 +263,12 @@ class UniFiRouterDriver(BaseRouterDriver):
                     vpn_id = str(existing_route["network_id"])
                 else:
                     vpns = await self.get_vpn_networks()
-                    if vpns:
+                    if len(vpns) == 1:
                         vpn_id = vpns[0]["id"]
+                    elif len(vpns) > 1:
+                        raise RuntimeError(
+                            "Multiple UniFi VPN Client networks found; select unifi_vpn_network_id explicitly"
+                        )
                     else:
                         raise RuntimeError(
                             "No UniFi VPN Client network found. Create a WireGuard/VPN Client in UniFi Network first."
@@ -277,6 +284,7 @@ class UniFiRouterDriver(BaseRouterDriver):
                 payload["enabled"] = requested_enabled
                 payload["target_devices"] = [{"type": "ALL_CLIENTS"}]
                 put_url = f"{routes_url}/{route_id}"
+                self.policy_write_started = True
                 update_resp = await client.put(put_url, json=payload)
                 if update_resp.status_code not in (200, 201):
                     raise RuntimeError(
@@ -296,6 +304,7 @@ class UniFiRouterDriver(BaseRouterDriver):
                     "regions": [],
                     "target_devices": [{"type": "ALL_CLIENTS"}],
                 }
+                self.policy_write_started = True
                 create_resp = await client.post(routes_url, json=create_payload)
                 if create_resp.status_code not in (200, 201):
                     raise RuntimeError(
@@ -376,30 +385,64 @@ class UniFiRouterDriver(BaseRouterDriver):
 
     async def health_check(self) -> DriverStatus:
         """Inspect UniFi controller connectivity and VPN interfaces on demand."""
+        from app.core.service_errors import sanitize_driver_error
+
         is_configured = bool(self.controller_url and self.api_key)
         vpn_list: list[dict[str, Any]] = []
         route_found = False
         health = DriverHealth.DEGRADED
+        ready = False
+        needs_vpn_selection = False
+        error_msg: str | None = None
 
         if is_configured:
             try:
                 vpn_list = await self.get_vpn_networks()
                 curr_routes = await self.get_current_routes(force=True)
                 route_found = bool(curr_routes)
-                health = DriverHealth.HEALTHY if vpn_list else DriverHealth.DEGRADED
+                vpn_ids = {v["id"] for v in vpn_list}
+                if not vpn_list:
+                    health = DriverHealth.DEGRADED
+                    error_msg = (
+                        "No se encontró ningún cliente VPN en UniFi Network. "
+                        "Crea un WireGuard/VPN Client en UniFi primero."
+                    )
+                elif self.vpn_network_id and self.vpn_network_id not in vpn_ids:
+                    health = DriverHealth.UNHEALTHY
+                    needs_vpn_selection = True
+                    error_msg = (
+                        f"La VPN seleccionada ({self.vpn_network_id}) no existe en UniFi. "
+                        "Selecciona una VPN válida."
+                    )
+                elif len(vpn_list) > 1 and not self.vpn_network_id:
+                    health = DriverHealth.DEGRADED
+                    needs_vpn_selection = True
+                    error_msg = (
+                        f"Se detectaron {len(vpn_list)} clientes VPN en UniFi. "
+                        "Selecciona explícitamente cuál usar antes de sincronizar."
+                    )
+                else:
+                    health = DriverHealth.HEALTHY
+                    ready = True
             except Exception as ex:
                 logger.warning("UniFi health probe failed: %s", ex)
                 health = DriverHealth.UNHEALTHY
+                error_msg = sanitize_driver_error(ex, self.driver_name, "probing UniFi controller")
 
-        details = {
+        details: dict[str, Any] = {
             "controller_url": self.controller_url or "not_configured",
             "site": self.site,
             "route_name": self.route_name,
             "vpn_network_id": self.vpn_network_id,
             "available_vpn_networks": len(vpn_list),
+            "vpn_networks": vpn_list,
+            "needs_vpn_selection": needs_vpn_selection,
+            "ready": ready,
             "route_exists_in_unifi": route_found,
             "configured": is_configured,
         }
+        if error_msg:
+            details["error"] = error_msg
 
         status = DriverStatus(
             driver_name=self.driver_name,

@@ -86,6 +86,8 @@ class VirtualGatewayDriver(BaseRouterDriver):
             return None
 
         try:
+            if payload.get("cmd") in {"policy", "sync"}:
+                self.policy_write_started = True
             writer.write(json.dumps(payload).encode("utf-8") + b"\n")
             await writer.drain()
             line = await asyncio.wait_for(reader.readline(), timeout=timeout)
@@ -200,18 +202,28 @@ class VirtualGatewayDriver(BaseRouterDriver):
     # ------------------------------------------------------------------ #
 
     async def health_check(self) -> DriverStatus:
-        """Inspect the sidecar through the socket, falling back to local nftables."""
+        """Inspect the sidecar through the socket, distinguishing socket vs WireGuard stages."""
         response = await self._socket_request({"cmd": "status"})
         if response is not None:
             self._status = self._status_from_socket(response)
             return self._status
 
+        wg_configured = os.path.exists(settings.wireguard_config_path)
         self._status = DriverStatus(
             self.driver_name,
             DriverHealth.UNHEALTHY,
             len(self._cached_routes),
             self._last_sync,
-            {"transport": "unavailable"},
+            {
+                "transport": "unavailable",
+                "socket_ok": False,
+                "wg_configured": wg_configured,
+                "stage": "socket_unavailable",
+                "message": (
+                    "No se pudo conectar con el socket del sidecar (/data/gateway.sock). "
+                    "Comprueba que el contenedor tebypass-gateway esté en ejecución."
+                ),
+            },
         )
         return self._status
 
@@ -222,26 +234,59 @@ class VirtualGatewayDriver(BaseRouterDriver):
         if isinstance(elements, list):
             self._cached_routes = {canonical_cidr(str(item)) for item in elements}
 
-        socket_ok = bool(response.get("ok"))
+        socket_ok = True
+        policy_ok = bool(response.get("ok"))
         set_ok = bool(nftables.get("set"))
+        mark_rule = bool(nftables.get("mark_rule"))
         wg_present = bool(wireguard.get("present"))
-        if socket_ok:
+        wg_configured = wg_present or os.path.exists(settings.wireguard_config_path)
+
+        if policy_ok:
             health = DriverHealth.HEALTHY
+            stage = "ready"
+            message = "Sidecar conectado, túnel wg0 activo y reglas nftables/fwmark listas."
         elif set_ok or wg_present:
             health = DriverHealth.DEGRADED
+            if not wg_present and not wg_configured:
+                stage = "pending_wireguard"
+                message = (
+                    "Sidecar conectado y nftables listo, pero falta subir la configuración "
+                    "WireGuard (wg0.conf) en Ajustes -> WireGuard."
+                )
+            elif not wg_present:
+                stage = "wireguard_down"
+                message = (
+                    "Sidecar conectado y wg0.conf guardado, pero la interfaz wg0 aún no está "
+                    "levantada. Revisa el túnel en Ajustes -> WireGuard."
+                )
+            else:
+                stage = "policy_incomplete"
+                message = (
+                    "Sidecar conectado y túnel wg0 presente, pero faltan reglas nftables/fwmark "
+                    "en el gateway."
+                )
         else:
             health = DriverHealth.UNHEALTHY
+            stage = "policy_incomplete"
+            message = str(
+                response.get("error")
+                or "Sidecar conectado, pero las tablas nftables del gateway no están listas."
+            )
 
         details: dict[str, Any] = {
             "transport": "unix_socket",
+            "socket_ok": socket_ok,
             "socket_path": self.socket_path() or "none",
             "set_name": nftables.get("set_name", self.set_name),
             "wireguard_interface": response.get("interface", "wg0"),
+            "wg_configured": wg_configured,
             "wireguard_up": wg_present,
             "wireguard_handshake_age": wireguard.get("handshake_age"),
             "nft_table": bool(nftables.get("table")),
             "nft_set": set_ok,
-            "mark_rule": bool(nftables.get("mark_rule")),
+            "mark_rule": mark_rule,
+            "stage": stage,
+            "message": message,
             "error": response.get("error"),
         }
         return DriverStatus(

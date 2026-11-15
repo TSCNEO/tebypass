@@ -26,8 +26,10 @@ Se configura una política de salida, un driver y un worker por instalación.
   conservan durante su retención; la aplicación no observa cuánto duran las conexiones.
 - Fail-closed del gateway bloquea destinos seleccionados sin ruta por el túnel. No
   configura automáticamente esa protección en otros routers. Ver [Configuración](CONFIGURATION.md).
-- Cambiar de router/política necesita retirar lo anterior; si falla la retirada, se rechaza
-  el cambio. No existe una transacción distribuida entre router y SQLite.
+- Cambiar de router/política con una política aplicada necesita retirar lo anterior; si
+  falla la retirada, se rechaza el cambio. Un candidato incompleto que nunca aplicó puede
+  corregirse sin retirada; abandonar un estado remoto desconocido exige confirmación
+  explícita. No existe una transacción distribuida entre router y SQLite.
 
 ## Cómo verificar una instalación
 

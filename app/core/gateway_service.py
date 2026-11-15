@@ -61,13 +61,13 @@ async def get_wireguard_config() -> WireGuardStatusResponse:
 
 async def upload_wireguard_config(payload: WireGuardUploadRequest) -> WireGuardUploadResponse:
     """Validate and atomically save before asking the sidecar to apply the file."""
-    from app.core.engine import ROUTING_LOCK
+    from app.core.engine import acquire_control_lock
 
     try:
         content = validate_config(payload.content)
     except ValueError as ex:
         raise ServiceError(status_code=400, detail=str(ex)) from ex
-    async with ROUTING_LOCK:
+    async with acquire_control_lock():
         path = _config_path()
         try:
             path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -94,9 +94,9 @@ async def upload_wireguard_config(payload: WireGuardUploadRequest) -> WireGuardU
 
 async def delete_wireguard_config() -> WireGuardStatusResponse:
     """Remove the stored WireGuard configuration, if any."""
-    from app.core.engine import ROUTING_LOCK
+    from app.core.engine import acquire_control_lock
 
-    async with ROUTING_LOCK:
+    async with acquire_control_lock():
         path = _config_path()
         path.unlink(missing_ok=True)
         await _apply_if_gateway()

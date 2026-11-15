@@ -3,7 +3,18 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -75,6 +86,14 @@ class Target(Base):
     """Network destination target (FQDN or CIDR block)."""
 
     __tablename__ = "targets"
+    __table_args__ = (
+        Index(
+            "uq_targets_manual_value",
+            "value",
+            unique=True,
+            sqlite_where=text("feed_id IS NULL"),
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     feed_id: Mapped[str | None] = mapped_column(
@@ -87,6 +106,14 @@ class Target(Base):
     value: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     description: Mapped[str | None] = mapped_column(String(255), nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    dns_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    dns_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    dns_last_checked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    dns_last_resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     feed: Mapped[Feed | None] = relationship("Feed", back_populates="targets")
@@ -100,6 +127,9 @@ class ResolvedIP(Base):
     """Resolved IP address associated with an FQDN target."""
 
     __tablename__ = "resolved_ips"
+    __table_args__ = (
+        UniqueConstraint("target_id", "ip_address", name="uq_resolved_ips_target_ip"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     target_id: Mapped[str] = mapped_column(

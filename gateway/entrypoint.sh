@@ -1,6 +1,11 @@
 #!/bin/bash
 set -e
 
+if [ -n "${TEBYPASS_GATEWAY_WG_IFACE:-}" ] && [ "${TEBYPASS_GATEWAY_WG_IFACE}" != "wg0" ]; then
+    echo "[TeByPass Gateway] ERROR: Unsupported TEBYPASS_GATEWAY_WG_IFACE='${TEBYPASS_GATEWAY_WG_IFACE}'; only 'wg0' is supported." >&2
+    exit 1
+fi
+
 echo "[TeByPass Gateway] Initializing L3 Split-Routing Sidecar..."
 
 CONTROLLER_BIN="${TEBYPASS_CONTROLLER_BIN:-/controller.py}"
