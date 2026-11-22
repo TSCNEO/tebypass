@@ -6,6 +6,7 @@ from typing import Any
 
 from stopliga.feed import (
     InvalidFeedError,
+    compact_history,
     extract_hayahora_active_ips,
     normalize_hayahora_isp,
     parse_status_payload_value,
@@ -13,6 +14,14 @@ from stopliga.feed import (
 )
 
 from app.core.config import settings
+
+
+def parse_community_document(raw_text: str) -> dict[str, Any]:
+    """Parse a community history feed via streaming ijson, retaining only latest events."""
+    parsed = compact_history(raw_text)
+    if not isinstance(parsed, dict):
+        raise ValueError("Community feed must decode to a JSON object")
+    return {str(key): value for key, value in parsed.items()}
 
 
 class InvalidISPFilterError(ValueError):

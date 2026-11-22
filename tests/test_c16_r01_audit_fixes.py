@@ -212,3 +212,33 @@ async def test_r01_ui_template_exposes_kill_switch_checkbox(client: httpx.AsyncC
     assert 'id="unifi-kill-switch"' in resp.text
     assert 'aria-describedby="unifi-kill-switch-hint"' in resp.text
     assert "kill_switch_enabled" in resp.text
+
+
+async def test_feed_lookback_hours_persists_validates_and_renders_in_ui(
+    client: httpx.AsyncClient,
+) -> None:
+    initial = await client.get("/api/v1/settings")
+    assert initial.status_code == 200
+    assert initial.json()["feed_lookback_hours"] == 24
+
+    updated = await client.put(
+        "/api/v1/settings",
+        json={"feed_lookback_hours": 12, "skip_auto_sync": True},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["feed_lookback_hours"] == 12
+    assert settings.feed_lookback_hours == 12
+
+    invalid = await client.put(
+        "/api/v1/settings",
+        json={"feed_lookback_hours": 0, "skip_auto_sync": True},
+    )
+    assert invalid.status_code == 400
+
+    page = await client.get("/")
+    assert page.status_code == 200
+    assert 'id="feed-lookback-hours"' in page.text
+    assert 'name="feed_lookback_hours"' in page.text
+    assert 'inputmode="numeric"' in page.text
+    assert 'aria-describedby="feed-lookback-hours-hint"' in page.text
+    assert 'id="feed-lookback-hours-hint"' in page.text

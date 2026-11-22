@@ -24,6 +24,7 @@ class UniFiRouterDriver(BaseRouterDriver):
 
     driver_name: str = "unifi"
     retains_policy_when_disabled: bool = True
+    health_observed_during_apply: bool = True
 
     def __init__(self, cfg: Settings | None = None) -> None:
         cfg = cfg or settings
@@ -157,17 +158,51 @@ class UniFiRouterDriver(BaseRouterDriver):
                 raise RuntimeError("Failed to query UniFi traffic routes") from ex
         return set(self._active_routes)
 
+    def _route_matches_desired(
+        self,
+        existing_route: dict[str, Any],
+        *,
+        desired_list: list[str],
+        requested_enabled: bool,
+        vpn_id: str,
+    ) -> bool:
+        """Return True when the remote UniFi Traffic Route already matches the full policy."""
+        if existing_route.get("matching_target") != "IP":
+            return False
+        if existing_route.get("network_id") != vpn_id:
+            return False
+        enabled_val = existing_route.get("enabled")
+        if not isinstance(enabled_val, bool) or enabled_val != requested_enabled:
+            return False
+        if existing_route.get("target_devices") != [{"type": "ALL_CLIENTS"}]:
+            return False
+        if "kill_switch_enabled" in existing_route:
+            if bool(existing_route.get("kill_switch_enabled")) != self.kill_switch:
+                return False
+        elif self.kill_switch:
+            return False
+        raw_entries = existing_route.get("ip_addresses")
+        if not isinstance(raw_entries, list) or len(raw_entries) != len(desired_list):
+            return False
+        existing_ips = {
+            str(entry["ip_or_subnet"])
+            for entry in raw_entries
+            if isinstance(entry, dict) and entry.get("ip_or_subnet")
+        }
+        return existing_ips == set(desired_list)
+
     async def apply_policy(self, targets: set[TargetCIDR], enabled: bool) -> SyncResult:
-        current = await self.get_current_routes(force=True)
+        if not self.controller_url or not self.api_key:
+            raise RuntimeError("UniFi controller URL and API key are required")
         desired = {target.cidr for target in targets} if enabled else set()
         result = await self.sync_routes(
-            {target for target in targets if target.cidr not in current} if enabled else set(),
-            current - desired,
+            set(),
+            set(),
             force=True,
             desired_cidrs=desired,
             policy_enabled=enabled,
         )
-        if result.success and await self.get_current_routes(force=True) != desired:
+        if result.success and self._active_routes != desired:
             raise RuntimeError("UniFi did not retain the requested policy")
         return result
 
@@ -214,21 +249,22 @@ class UniFiRouterDriver(BaseRouterDriver):
                 )
 
             routes_data = resp.json()
+            if not isinstance(routes_data, list):
+                raise RuntimeError("Invalid UniFi routes response")
+            self._observed_at = datetime.now(UTC)
             existing_route: dict[str, Any] | None = None
             if (
-                isinstance(routes_data, list)
-                and sum(
+                sum(
                     isinstance(route, dict) and route.get("description") == self.route_name
                     for route in routes_data
                 )
                 > 1
             ):
                 raise RuntimeError("Duplicate managed UniFi routes")
-            if isinstance(routes_data, list):
-                for r in routes_data:
-                    if isinstance(r, dict) and r.get("description") == self.route_name:
-                        existing_route = r
-                        break
+            for r in routes_data:
+                if isinstance(r, dict) and r.get("description") == self.route_name:
+                    existing_route = r
+                    break
 
             # Calculate desired IP set
             current_ips: set[str] = set()
@@ -250,19 +286,26 @@ class UniFiRouterDriver(BaseRouterDriver):
             # UniFi rejects an empty IP match even when disabling a policy. Keep its last
             # members as configuration while reporting no effective active routes.
             desired_list = sorted(desired_set if requested_enabled else current_ips)
-
-            ip_entries: list[dict[str, Any]] = [
-                {
-                    "ip_or_subnet": ip,
-                    "ip_version": "v6" if ":" in ip else "v4",
-                    "ports": [],
-                    "port_ranges": [],
-                }
-                for ip in desired_list
-            ]
+            effective_current = (
+                current_ips if (existing_route and existing_route.get("enabled", True)) else set()
+            )
+            effective_desired = set(desired_list) if requested_enabled else set()
 
             if not existing_route and not desired_list:
-                return SyncResult(self.driver_name, 0, 0, 0, 0, True)
+                now = datetime.now(UTC)
+                self._active_routes.clear()
+                self._observed_kill_switch = None
+                self._routes_loaded = True
+                self._observed_at = now
+                self._last_sync = now
+                return SyncResult(
+                    driver_name=self.driver_name,
+                    added_count=0,
+                    removed_count=0,
+                    total_active=0,
+                    duration_ms=round((time.perf_counter() - start) * 1000.0, 2),
+                    success=True,
+                )
 
             # Resolve VPN client network ID
             vpn_id = self.vpn_network_id
@@ -281,6 +324,42 @@ class UniFiRouterDriver(BaseRouterDriver):
                         raise RuntimeError(
                             "No UniFi VPN Client network found. Create a WireGuard/VPN Client in UniFi Network first."
                         )
+
+            if existing_route is not None and self._route_matches_desired(
+                existing_route,
+                desired_list=desired_list,
+                requested_enabled=requested_enabled,
+                vpn_id=vpn_id,
+            ):
+                logger.debug("UniFi traffic route already matches desired policy; skipping PUT.")
+                now = datetime.now(UTC)
+                self._active_routes = effective_desired
+                self._observed_kill_switch = (
+                    bool(existing_route.get("kill_switch_enabled"))
+                    if "kill_switch_enabled" in existing_route
+                    else self.kill_switch
+                )
+                self._routes_loaded = True
+                self._observed_at = now
+                self._last_sync = now
+                return SyncResult(
+                    driver_name=self.driver_name,
+                    added_count=0,
+                    removed_count=0,
+                    total_active=len(self._active_routes),
+                    duration_ms=round((time.perf_counter() - start) * 1000.0, 2),
+                    success=True,
+                )
+
+            ip_entries: list[dict[str, Any]] = [
+                {
+                    "ip_or_subnet": ip,
+                    "ip_version": "v6" if ":" in ip else "v4",
+                    "ports": [],
+                    "port_ranges": [],
+                }
+                for ip in desired_list
+            ]
 
             if existing_route:
                 route_id = existing_route["_id"]
@@ -360,20 +439,32 @@ class UniFiRouterDriver(BaseRouterDriver):
                     "UniFi post-write verification failed; previous policy restoration requested"
                 )
 
-            self._active_routes = set(desired_list) if requested_enabled else set()
+            now = datetime.now(UTC)
+            self._active_routes = effective_desired
             self._observed_kill_switch = (
                 bool(matched.get("kill_switch_enabled"))
                 if "kill_switch_enabled" in matched
                 else self.kill_switch
             )
             self._routes_loaded = True
-            self._last_sync = datetime.now(UTC)
+            self._observed_at = now
+            self._last_sync = now
             duration_ms = (time.perf_counter() - start) * 1000.0
+            added_count = (
+                len(effective_desired - effective_current)
+                if desired_cidrs is not None
+                else len(to_add)
+            )
+            removed_count = (
+                len(effective_current - effective_desired)
+                if desired_cidrs is not None
+                else len(to_remove)
+            )
 
             return SyncResult(
                 driver_name=self.driver_name,
-                added_count=len(to_add),
-                removed_count=len(to_remove),
+                added_count=added_count,
+                removed_count=removed_count,
                 total_active=len(self._active_routes),
                 duration_ms=round(duration_ms, 2),
                 success=True,

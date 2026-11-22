@@ -499,7 +499,8 @@ class ReconciliationEngine:
             await self._track_policy_ownership(driver, None)
             raise
         await self._track_policy_ownership(driver, sync_res)
-        await driver.health_check()
+        if not (sync_res.success and driver.health_observed_during_apply):
+            await driver.health_check()
         await self._record_result(sync_res, now)
         return sync_res
 

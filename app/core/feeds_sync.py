@@ -14,10 +14,11 @@ from weakref import WeakKeyDictionary
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.community import InvalidISPFilterError, parse_snapshot
+from app.core.community import InvalidISPFilterError, parse_community_document, parse_snapshot
 from app.core.config import settings
 from app.core.feed_http import download
 from app.core.feeds import FeedManager
+from app.core.schedule import community_schedule
 from app.core.targets import as_utc
 from app.db.models import Feed, Target
 from app.db.session import AsyncSessionLocal
@@ -39,6 +40,10 @@ def feed_lock(feed_id: str) -> asyncio.Lock:
         lock = asyncio.Lock()
         per_loop[feed_id] = lock
     return lock
+
+
+def _is_community_feed(feed: Feed) -> bool:
+    return feed.format in {"hayahora", "stopliga"} or feed.blocked is not None
 
 
 async def refresh_feed(session: AsyncSession, feed: Feed, force: bool = False) -> int:
@@ -69,15 +74,19 @@ async def refresh_feed(session: AsyncSession, feed: Feed, force: bool = False) -
             feed.last_error = None
             await session.commit()
             return 0
-        payload = json.loads(content) if feed_format != "plaintext" else None
-        community = feed_format in {"hayahora", "stopliga"} or (
-            isinstance(payload, dict) and isinstance(payload.get("data"), list)
-        )
+        if feed_format in {"hayahora", "stopliga"}:
+            payload = await asyncio.to_thread(parse_community_document, content)
+            community = True
+        elif feed_format == "plaintext":
+            payload = None
+            community = False
+        else:
+            payload = json.loads(content)
+            community = isinstance(payload, dict) and isinstance(payload.get("data"), list)
         if community:
             snapshot = parse_snapshot(payload, settings.feed_force_active, settings.feed_isp_filter)
-            parsed = [
-                item for value in snapshot.destinations if (item := manager.parse_entry(value))
-            ]
+            destinations = snapshot.destinations if snapshot.blocked else []
+            parsed = [item for value in destinations if (item := manager.parse_entry(value))]
         else:
             parsed = manager.parse_content(content, feed_format=feed_format)
         if len(parsed) > settings.feed_max_targets:
@@ -163,8 +172,11 @@ async def refresh_due_feeds(
 
     cutoff = datetime.now(UTC) - timedelta(seconds=interval_seconds)
     feeds = (await session.execute(select(Feed).where(Feed.enabled.is_(True)))).scalars().all()
+    schedule_active = community_schedule().is_active()
     due_ids: list[str] = []
     for feed in feeds:
+        if not force and not schedule_active and _is_community_feed(feed):
+            continue
         last = feed.last_fetched_at
         if last is not None and last.tzinfo is None:
             last = last.replace(tzinfo=UTC)

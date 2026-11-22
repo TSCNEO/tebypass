@@ -1,3 +1,16 @@
+# TeByPass 0.2.4
+
+Actualización de mantenimiento y eficiencia sobre la serie 0.2 enfocada en reducir carga sobre controladores UniFi, eliminar residuos visuales cuando no hay bloqueos activos y optimizar el procesamiento del feed comunitario:
+
+- **UniFi idempotente sin `PUT`s redundantes:** `UniFiRouterDriver` observa la Traffic Route V2 con un único `GET` por ciclo (`health_observed_during_apply=True`), compara el estado completo deseado (`ip_addresses`, `enabled`, `network_id`, `target_devices`, `kill_switch_enabled`) y omite `PUT`, verificación post-escritura y `health_check()` redundantes cuando ya coincide, conservando detección de drift externo y estado de salud real.
+- **Purga automática del feed comunitario en `SIN BLOQUEOS`:** cuando la señal global es `blocked=false` (y `feed_force_active=false`), se vacían los destinos comunitarios en SQLite (`IPs en lista: 0`) para mantener coherencia entre panel, contadores y router; los destinos manuales permanecen siempre activos y, si no hay manuales, UniFi desactiva la regla. Los errores de red, esquema o filtro de operador conservan el último snapshot válido.
+- **Optimización ligera del feed comunitario:** parseo en streaming con `stopliga.feed.compact_history` (`ijson`) para `hayahora`/`stopliga` sin retener histórico completo en memoria, y omisión de descargas automáticas comunitarias fuera de la franja horaria configurada (`active_days`/`active_hours`).
+- **Ventana de incidencias visible en el panel:** `feed_lookback_hours` (`24` h por defecto) pasa a ser configurable desde **Ajustes → Motor** además de por API.
+
+Actualizar **ambas imágenes a 0.2.4** si se utiliza gateway virtual (`tebypass` y `tebypass-gateway`).
+
+---
+
 # TeByPass 0.2.3
 
 Actualización de mantenimiento sobre la serie 0.2 enfocada en ciclo de vida de tareas, visibilidad en UniFi y cobertura contractual de red:

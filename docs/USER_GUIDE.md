@@ -52,12 +52,16 @@ El interruptor comunitario habilita/pausa ese feed, no todos los destinos.
 pueden reponer sus registros al descargarse: editar manualmente un registro importado
 no constituye una exclusión persistente. Usar un destino manual para contribuciones propias.
 
-Estados: PAUSADA, SIN CONFIRMAR, BLOQUEO ACTIVO o SIN BLOQUEOS. Error de descarga, esquema,
-frescura, límite o un filtro de operador (`feed_isp_filter`) que no coincida con el feed
-conserva el snapshot válido anterior y muestra degradación (indicando los operadores
-disponibles en el feed). La fuente no se convierte en vacía por un error. El modo forzado
-usa incidencias recientes aunque la señal global sea inactiva; mantiene frescura,
-habilitación y horario.
+Estados: PAUSADA, SIN CONFIRMAR, BLOQUEO ACTIVO o SIN BLOQUEOS. Cuando el estado es
+`SIN BLOQUEOS` (y el modo forzado está desactivado), la fuente vacía sus destinos en la
+base de datos (`IPs en lista: 0`) para no mostrar residuos ni poblar la tabla principal;
+tus destinos manuales permanecen siempre activos, y si no hay destinos manuales el driver
+desactiva la regla en el router. Error de descarga, esquema, frescura, límite o un filtro
+de operador (`feed_isp_filter`) que no coincida con el feed conserva el snapshot válido
+anterior y muestra degradación (indicando los operadores disponibles en el feed). La fuente
+no se convierte en vacía por un error. El modo forzado usa incidencias recientes aunque la
+señal global sea inactiva; mantiene frescura, habilitación y horario. La ventana de
+incidencias (`feed_lookback_hours`, 24 h por defecto) puede ajustarse desde **Ajustes → Motor**.
 
 Registrar múltiples fuentes o eliminarlas se hace por [API](API.md); el panel principal
 presenta una fuente comunitaria, no un gestor completo de feeds. Crear fuente sin
@@ -104,9 +108,10 @@ habilitada la necesita. Una carpeta no es una contribución con interruptor prop
 ## Horario, alertas y diagnóstico
 
 [Referencia de motor](CONFIGURATION.md#motor-y-fuentes) para días, franja, zona IANA,
-intervalo, retención, filtro de operador y webhook. Ejemplo: `mon,tue,wed,thu,fri`,
-`18:00-23:00`, `Europe/Madrid` con sincronización positiva. Fuera de horario no
-contribuye la fuente comunitaria; destinos manuales permanecen habilitados.
+intervalo, retención, filtro de operador, ventana de incidencias y webhook. Ejemplo:
+`mon,tue,wed,thu,fri`, `18:00-23:00`, `Europe/Madrid` con sincronización positiva. Fuera de
+horario no contribuye la fuente comunitaria ni se descarga automáticamente en segundo plano
+(la descarga o sincronización manual sí se ejecuta); destinos manuales permanecen habilitados.
 
 El panel distingue destinos, IPs resueltas y rutas activas; no son contadores equivalentes.
 Último error/último intento, `uncovered_targets` y estado del driver importan más que un

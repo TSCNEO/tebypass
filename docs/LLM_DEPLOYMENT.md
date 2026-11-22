@@ -139,7 +139,11 @@ Continuar en la etapa 5. Esta vía no necesita la etapa 4B.
   caída del túnel para destinos seleccionados y recuperación sin atribuir esa garantía
   a los demás drivers. No interrumpir un túnel compartido sin acordar esa prueba.
 - Fuentes: activar únicamente las elegidas tras validar; explicar retención DNS,
-  snapshot conservado en errores y diferencia entre pausa global y pausa de feed.
+  snapshot conservado en errores, diferencia entre pausa global y pausa de feed y
+  comportamiento en reposo: con `SIN BLOQUEOS` (sin `feed_force_active`) la lista
+  comunitaria queda en `0` IPs, los destinos manuales siguen activos en el router y, si
+  no hay manuales, la regla del router se desactiva (`enabled=false` en UniFi). En
+  ciclos sin cambios, UniFi observa el estado mediante `GET` sin emitir `PUT`s redundantes.
 - Persistencia tras recreación cuando sea viable; copia consistente de BD y secretos,
   versión instalada y procedimiento de actualización/rollback del modo elegido.
 

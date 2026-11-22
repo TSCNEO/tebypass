@@ -177,7 +177,7 @@
       </div>
       <div class="px-5 py-3 text-[12px] text-slate-500 flex items-start gap-2">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mt-0.5 flex-none"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-        <span>Si el feed dice que no hay bloqueo activo, esta lista no enruta nada: no malgasta tu VPN.
+        <span>Si el feed dice que no hay bloqueo activo, esta lista queda vacía y no enruta nada (tus destinos manuales siguen activos).
         El modo forzado de Ajustes ignora la señal global y usa incidencias recientes.</span>
       </div>
     </section>
@@ -578,10 +578,17 @@
               <p class="text-[11px] text-slate-600 mt-1">Evita cortes cuando un CDN rota sus IPs.</p>
             </div>
           </div>
-          <div>
-            <label class="field">Filtrar el feed por operador</label>
-            <input x-model="settings.feed_isp_filter" placeholder="Vacío = todos los operadores" class="mono">
-            <p x-show="feed && feed.last_error" class="text-xs text-red-400 mt-1" x-text="feed ? feed.last_error : ''"></p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="field" for="feed-isp-filter">Filtrar el feed por operador</label>
+              <input id="feed-isp-filter" name="feed_isp_filter" x-model="settings.feed_isp_filter" placeholder="Vacío = todos los operadores" class="mono">
+              <p x-show="feed && feed.last_error" class="text-xs text-red-400 mt-1" x-text="feed ? feed.last_error : ''"></p>
+            </div>
+            <div>
+              <label class="field" for="feed-lookback-hours">Ventana de incidencias (horas)</label>
+              <input id="feed-lookback-hours" name="feed_lookback_hours" type="number" min="1" step="1" inputmode="numeric" required aria-describedby="feed-lookback-hours-hint" x-model.number="settings.feed_lookback_hours" class="mono">
+              <p id="feed-lookback-hours-hint" class="text-[11px] text-slate-600 mt-1">24 h por defecto. Descarta bloqueos sin cierre más antiguos; valores muy bajos (&lt;6 h) pueden soltar bloqueos largos.</p>
+            </div>
           </div>
           <div>
             <label class="field">URL del feed comunitario</label>
@@ -867,6 +874,7 @@ function tebypass() {
       try {
         this.settings = await this.api('GET', '/api/v1/settings');
         if (this.settings.feed_force_active === undefined) this.settings.feed_force_active = false;
+        if (this.settings.feed_lookback_hours === undefined) this.settings.feed_lookback_hours = 24;
       } catch (e) { this.fail(e); }
     },
 

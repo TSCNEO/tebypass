@@ -16,14 +16,22 @@
   versión monotónica de política para no reaplicar resultados previos a un cambio. No
   maneja APIs concretas de routers ni comandos de red.
 - `community.py`: snapshot con señal global y destinos recientes separados, mediante
-  funciones de stopliga fijadas a un commit. El ISP limita destinos, no redefine la señal.
+  funciones de stopliga fijadas a un commit (`parse_community_document` usa streaming
+  `compact_history` con `ijson` para retener solo el último evento de cada entrada). El
+  ISP limita destinos, no redefine la señal.
 - `feed_http.py` / `feeds_sync.py`: descarga acotada a 16 MiB, concurrencia limitada y
   presupuesto total por ciclo; serializa refrescos de un mismo feed con `feed_lock` sin
-  retener `ROUTING_LOCK`. Un fallo conserva el snapshot anterior y registra error. HTTP
+  retener `ROUTING_LOCK`. Cuando `blocked=false` (sin `feed_force_active`), purga los
+  `Target` del feed en SQLite conservando intactos los destinos manuales; un fallo
+  conserva el snapshot anterior y registra error. Fuera de horario (`community_schedule`),
+  los ciclos automáticos omiten la descarga de feeds comunitarios (`force=False`). HTTP
   304 no rejuvenece la fecha de origen. No se permite fallback de JSON a texto/HTML.
 - `schedule.py` / `notifications.py`: horarios solo para contribuciones comunitarias y
   webhook opcional de transiciones, con deduplicación persistida y reintento por ciclo.
-- `drivers`: implementan `BaseRouterDriver`; no consultan la BD. Omada/OPNsense aíslan
+- `drivers`: implementan `BaseRouterDriver`; no consultan la BD. `UniFiRouterDriver`
+  declara `health_observed_during_apply=True`: `apply_policy()` realiza un único `GET`
+  de observación y omite `PUT`, verificación post-escritura y `health_check()` redundante
+  cuando la Traffic Route remota ya coincide con la política deseada. Omada/OPNsense aíslan
   clientes síncronos upstream en threads y esperan su finalización incluso al cancelar.
 - `gateway`: proceso independiente con control Unix, validación de prefijos, mutaciones
   nft transaccionales y ciclo de vida WireGuard. Comparte volumen con la aplicación.

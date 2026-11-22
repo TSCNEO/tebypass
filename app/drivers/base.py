@@ -64,6 +64,10 @@ class BaseRouterDriver(ABC):
     # configuration still belongs to the current identity and must be retired later.
     retains_policy_when_disabled: bool = False
 
+    # Drivers that already observe remote health/state during ``apply_policy`` can opt out
+    # of an extra immediate ``health_check()`` probe after a successful apply.
+    health_observed_during_apply: bool = False
+
     @abstractmethod
     async def initialize(self) -> None:
         """Initialize driver resources, network sessions, or sockets."""

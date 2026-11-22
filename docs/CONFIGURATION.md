@@ -41,7 +41,7 @@ no necesariamente los de una instalación existente.
 | `feed_force_active` | `false` | Ignora señal global comunitaria y utiliza incidencias recientes; mantiene controles de frescura y horario. No activa un feed pausado. |
 | `hayahora_feed_url` | Fuente comunitaria integrada | URL HTTP(S) sin credenciales. Cambiarla actualiza el feed que usaba la URL anterior y reinicia su caché HTTP. |
 | `feed_max_age_seconds` | `3600` | Solo API: antigüedad máxima comunitaria, mínimo 60 s. Error conserva snapshot válido anterior y degrada estado. |
-| `feed_lookback_hours` | `24` | Solo API: ventana de incidencias comunitarias; entero ≥ 1. |
+| `feed_lookback_hours` | `24` | Ajustes → Motor y API: ventana máxima de antigüedad (en horas, entero ≥ 1) para incidencias comunitarias sin evento de cierre. Descarta bloqueos antiguos sin desbloqueo explícito; valores muy bajos (< 6 h) pueden retirar bloqueos largos durante una jornada. |
 | `feed_max_targets` | `16384` | Solo API: máximo de destinos por feed, entero ≥ 1; el exceso rechaza el documento, no lo trunca. |
 | `active_days` | vacío | Días comunitarios separados por coma: `mon,tue,wed,thu,fri,sat,sun`; vacío = todos. |
 | `active_hours` | vacío | Una o varias franjas separadas por coma, como `12:00-14:00,18:00-23:00`; vacío = todo el día. Inicio incluido, fin excluido. Una franja nocturna pertenece al día de inicio; inicio y fin iguales se rechazan. |
@@ -52,6 +52,8 @@ no necesariamente los de una instalación existente.
 | `log_level` | `INFO` | Solo API; persistido y aplicado al logger de app al cargar ajustes en arranque. Reiniciar para asegurar aplicación. |
 
 Horario solo restringe contribuciones comunitarias, no destinos manuales ni feeds genéricos.
+Fuera de la franja horaria configurada, los ciclos automáticos tampoco descargan fuentes
+comunitarias (las peticiones manuales como sincronizar o actualizar lista sí se ejecutan).
 Con intervalo 0 no hay evaluación autónoma del horario: ejecutar sincronización manual
 para aplicar transiciones. Si se necesita funcionamiento automático, usar intervalo positivo.
 
@@ -77,6 +79,9 @@ en el siguiente ciclo, con posible duplicado. No existe cola de cada transición
 
 Política actual para todos los clientes alcanzados por la regla. No hay selección
 individual de clientes desde el panel. El ejemplo de recorrido está en el README.
+Cada ciclo de reconciliación observa la Traffic Route mediante `GET` para detectar cambios
+externos y salud real, omitiendo el `PUT` cuando miembros, estado (`enabled`), VPN,
+clientes (`ALL_CLIENTS`) y `kill_switch_enabled` ya coinciden con la política deseada.
 
 ## Omada — Ajustes → Router
 

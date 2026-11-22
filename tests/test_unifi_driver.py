@@ -1,12 +1,17 @@
 """Unit tests for the UniFi router driver and VPN networks API."""
 
 import json
+from typing import Any
 from unittest.mock import patch
 
 import httpx
 import pytest
 
-from app.drivers.base import TargetCIDR
+from app.core.config import Settings
+from app.core.engine import ReconciliationEngine
+from app.db.models import Target
+from app.db.session import AsyncSessionLocal
+from app.drivers.base import DriverHealth, TargetCIDR
 from app.drivers.unifi import UniFiRouterDriver
 
 
@@ -236,3 +241,151 @@ async def test_disabled_policy_with_retained_members_stays_disabled() -> None:
         {"ip_or_subnet": "198.51.100.7/32", "ip_version": "v4", "ports": [], "port_ranges": []}
     ]
     assert await driver.get_current_routes(force=True) == set()
+
+
+async def test_unifi_apply_policy_skips_put_when_route_matches() -> None:
+    """Matching remote route state skips PUT and post-write GET while updating observation."""
+    driver = UniFiRouterDriver(
+        Settings(
+            router_driver="unifi",
+            unifi_controller_url="https://router.example.net",
+            unifi_api_key="test-key",
+            unifi_vpn_network_id="vpn-1",
+            unifi_kill_switch=False,
+        )
+    )
+    route: dict[str, Any] = {
+        "_id": "route-1",
+        "description": "TeByPass",
+        "matching_target": "IP",
+        "enabled": True,
+        "network_id": "vpn-1",
+        "kill_switch_enabled": False,
+        "target_devices": [{"type": "ALL_CLIENTS"}],
+        "ip_addresses": [
+            {"ip_or_subnet": "198.51.100.7/32", "ip_version": "v4", "ports": [], "port_ranges": []}
+        ],
+    }
+    methods: list[str] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        if "/api/self/sites" in str(request.url):
+            return httpx.Response(200, json={"data": [{"name": "default"}]})
+        methods.append(request.method)
+        return httpx.Response(200, json=[route])
+
+    driver._client = lambda: httpx.AsyncClient(transport=httpx.MockTransport(handle))  # type: ignore[method-assign]
+    res = await driver.apply_policy({TargetCIDR("198.51.100.7/32", "t1")}, True)
+    assert res.success is True
+    assert res.added_count == 0
+    assert res.removed_count == 0
+    assert res.total_active == 1
+    assert driver.policy_write_started is False
+    assert methods == ["GET"]
+    assert driver.get_status().health == DriverHealth.HEALTHY
+
+    # Same behavior when the policy is already disabled on UniFi with retained members.
+    route["enabled"] = False
+    methods.clear()
+    res_disabled = await driver.apply_policy(set(), False)
+    assert res_disabled.success is True
+    assert res_disabled.added_count == 0
+    assert res_disabled.removed_count == 0
+    assert res_disabled.total_active == 0
+    assert driver.policy_write_started is False
+    assert methods == ["GET"]
+
+
+async def test_unifi_apply_policy_writes_on_drift() -> None:
+    """Any difference in IPs, enabled flag, VPN, kill-switch, or target_devices triggers PUT."""
+    driver = UniFiRouterDriver(
+        Settings(
+            router_driver="unifi",
+            unifi_controller_url="https://router.example.net",
+            unifi_api_key="test-key",
+            unifi_vpn_network_id="vpn-1",
+            unifi_kill_switch=False,
+        )
+    )
+    route: dict[str, Any] = {
+        "_id": "route-1",
+        "description": "TeByPass",
+        "matching_target": "IP",
+        "enabled": True,
+        "network_id": "vpn-1",
+        "kill_switch_enabled": True,
+        "target_devices": [{"type": "ALL_CLIENTS"}],
+        "ip_addresses": [
+            {"ip_or_subnet": "198.51.100.7/32", "ip_version": "v4", "ports": [], "port_ranges": []}
+        ],
+    }
+    methods: list[str] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        if "/api/self/sites" in str(request.url):
+            return httpx.Response(200, json={"data": [{"name": "default"}]})
+        methods.append(request.method)
+        if request.method == "PUT":
+            route.update(httpx.Response(200, content=request.content).json())
+        return httpx.Response(200, json=[route])
+
+    driver._client = lambda: httpx.AsyncClient(transport=httpx.MockTransport(handle))  # type: ignore[method-assign]
+    res = await driver.apply_policy({TargetCIDR("198.51.100.7/32", "t1")}, True)
+    assert res.success is True
+    assert methods == ["GET", "PUT", "GET"]
+    assert route["kill_switch_enabled"] is False
+
+    # Next steady-state call makes only 1 GET and 0 PUTs.
+    methods.clear()
+    res_steady = await driver.apply_policy({TargetCIDR("198.51.100.7/32", "t1")}, True)
+    assert res_steady.success is True
+    assert methods == ["GET"]
+
+
+async def test_unifi_reconcile_skips_redundant_health_check_and_put(db_ready: None) -> None:
+    """ReconciliationEngine avoids redundant health_check() and PUT on steady-state UniFi cycles."""
+    async with AsyncSessionLocal() as session:
+        session.add(Target(value="198.51.100.10/32", destination_type="cidr"))
+        await session.commit()
+
+    driver = UniFiRouterDriver(
+        Settings(
+            router_driver="unifi",
+            unifi_controller_url="https://router.example.net",
+            unifi_api_key="test-key",
+            unifi_vpn_network_id="vpn-1",
+        )
+    )
+    route: dict[str, Any] = {
+        "_id": "route-1",
+        "description": "TeByPass",
+        "matching_target": "IP",
+        "enabled": True,
+        "network_id": "vpn-1",
+        "kill_switch_enabled": False,
+        "target_devices": [{"type": "ALL_CLIENTS"}],
+        "ip_addresses": [
+            {"ip_or_subnet": "198.51.100.10/32", "ip_version": "v4", "ports": [], "port_ranges": []}
+        ],
+    }
+    calls: list[tuple[str, str]] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        calls.append((request.method, request.url.path))
+        if "/api/self/sites" in str(request.url):
+            return httpx.Response(200, json={"data": [{"name": "default"}]})
+        return httpx.Response(200, json=[route])
+
+    driver._client = lambda: httpx.AsyncClient(transport=httpx.MockTransport(handle))  # type: ignore[method-assign]
+    engine = ReconciliationEngine(driver=driver)
+
+    first = await engine.reconcile()
+    assert first.success is True
+    assert driver.get_status().health == DriverHealth.HEALTHY
+    assert [m for m, p in calls if "trafficroutes" in p] == ["GET"]
+
+    calls.clear()
+    second = await engine.reconcile()
+    assert second.success is True
+    assert calls == [("GET", "/proxy/network/v2/api/site/default/trafficroutes")]
+    assert driver.get_status().health == DriverHealth.HEALTHY

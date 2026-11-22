@@ -7,6 +7,7 @@ import httpx
 
 from app.core.config import settings
 from app.core.engine import ReconciliationEngine
+from app.core.feeds_sync import refresh_due_feeds
 from app.core.notifications import notify_transition
 from app.db.models import Feed, Target
 from app.db.session import AsyncSessionLocal
@@ -56,3 +57,52 @@ async def test_webhook_only_sends_transitions(db_ready: None) -> None:
         assert send.await_count == 1
         await notify_transition(SyncResult("mock", 0, 0, -1, 0, False))
         assert send.await_count == 2
+
+
+async def test_closed_schedule_skips_community_feed_download_unless_forced(
+    db_ready: None,
+) -> None:
+    settings.active_days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"][
+        (datetime.now(UTC).weekday() + 1) % 7
+    ]
+    async with AsyncSessionLocal() as session:
+        community = Feed(
+            name="Community",
+            url="https://feed.example.net/community.json",
+            format="hayahora",
+            enabled=True,
+        )
+        generic = Feed(
+            name="Static",
+            url="https://feed.example.net/static.txt",
+            format="plaintext",
+            enabled=True,
+        )
+        session.add_all([community, generic])
+        await session.commit()
+
+    downloaded: list[str] = []
+
+    async def fake_download(url: str, etag: str | None = None) -> tuple[str | None, str | None]:
+        downloaded.append(url)
+        if url.endswith("static.txt"):
+            return ("192.0.2.7/32\n", '"s1"')
+        return (
+            '{"lastUpdate":"' + datetime.now(UTC).isoformat() + '","isBlocked":false,"data":[]}',
+            '"c1"',
+        )
+
+    with patch("app.core.feeds_sync.download", side_effect=fake_download):
+        async with AsyncSessionLocal() as session:
+            refreshed = await refresh_due_feeds(session, 300, force=False)
+        assert refreshed == 1
+        assert downloaded == ["https://feed.example.net/static.txt"]
+
+        downloaded.clear()
+        async with AsyncSessionLocal() as session:
+            refreshed_forced = await refresh_due_feeds(session, 300, force=True)
+        assert refreshed_forced == 2
+        assert set(downloaded) == {
+            "https://feed.example.net/static.txt",
+            "https://feed.example.net/community.json",
+        }

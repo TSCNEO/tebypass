@@ -18,6 +18,10 @@ devuelve 502 saneado si falla la observación). Pausa/purga deben retirar o desa
 gestionado y comprobarlo. UniFi administra ALL_CLIENTS, preserva estados explícitamente
 deshabilitados (`is_active=false`), soporta `unifi_kill_switch` opcional (`false` por defecto,
 visibilizado en estado y prueba de conexión) y exige selección explícita cuando existen varias VPN.
+Para evitar escrituras periódicas redundantes sin perder detección de drift ni salud real,
+`UniFiRouterDriver` observa la ruta con un único `GET` por ciclo (`health_observed_during_apply=true`)
+y omite el `PUT` cuando miembros, `enabled`, `network_id`, `target_devices` y `kill_switch_enabled`
+ya coinciden con la política deseada.
 OPNsense valida acción/dirección/alias/gateway de su regla y MikroTik exige tabla FIB.
 La configuración candidata y la aplicada se separan: `test-router` y la detección de VPN
 evalúan candidatos en memoria sin persistir ni sincronizar, mientras el motor registra
@@ -47,8 +51,11 @@ con los manuales. Cada `Target` FQDN registra `dns_status`/`dns_error` y `/api/v
 expone `dns_errors` y `uncovered_targets` (degradando salud cuando un objetivo activo
 queda sin IPs). Las resoluciones DNS en `resolved_ips` tienen restricción única
 `(target_id, ip_address)` y se actualizan de forma atómica en `resolution_store.py` sin
-acortar retención ni fallar si un target se elimina concurrentemente. Los destinos de un
-feed conservan identidad y retención DNS si siguen presentes. El error de una fuente
+acortar retención ni fallar si un target se elimina concurrentemente. Los destinos de un feed conservan identidad y retención DNS si siguen presentes; los feeds
+comunitarios (`hayahora`/`stopliga`) se parsean en streaming (`compact_history`) y purgan
+sus `Target` en SQLite cuando la señal pasa a `blocked=false` (sin `feed_force_active`)
+para mantener coherencia entre router, BD y panel. Fuera de horario configurado, los ciclos
+automáticos omiten descargas comunitarias (`force=false`). El error de una fuente
 (incluido filtro de operador inválido) conserva snapshot, `etag` y targets previos y
 muestra degradación. Manuales y feeds habilitados contribuyen a la misma política;
 señal/horario comunitarios no deshabilitan destinos manuales. La retención efectiva de

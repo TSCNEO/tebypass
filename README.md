@@ -46,14 +46,14 @@ comandos en el servidor, podrá realizar el despliegue; si no, te guiará paso a
 2. **Prepara el servidor:** instala Docker Engine y Docker Compose v2. Los comandos
    siguientes arrancan solo la aplicación; la [guía de instalación](docs/INSTALLATION.md)
    incluye el arranque específico del gateway y la alternativa de compilar desde Git.
-3. **Descarga y arranca** la versión [0.2.3](https://github.com/TSCNEO/tebypass/releases/tag/v0.2.3).
+3. **Descarga y arranca** la versión [0.2.4](https://github.com/TSCNEO/tebypass/releases/tag/v0.2.4).
    Descarga también `SHA256SUMS` y verifica el Compose antes de ejecutarlo:
 
 ```sh
 mkdir tebypass
 cd tebypass
-curl -fLO https://github.com/TSCNEO/tebypass/releases/download/v0.2.3/docker-compose.yml
-curl -fLO https://github.com/TSCNEO/tebypass/releases/download/v0.2.3/SHA256SUMS
+curl -fLO https://github.com/TSCNEO/tebypass/releases/download/v0.2.4/docker-compose.yml
+curl -fLO https://github.com/TSCNEO/tebypass/releases/download/v0.2.4/SHA256SUMS
 sha256sum -c SHA256SUMS --ignore-missing
 # En macOS: shasum -a 256 -c SHA256SUMS --ignore-missing
 ```
